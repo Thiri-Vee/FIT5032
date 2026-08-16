@@ -125,8 +125,10 @@ const submitForm = () => {
     ...formData.value,
   })
 }
-
+//make clear button clickable
 const clearForm = () => {
+  console.log('Clear button clicked')
+
   formData.value = {
     username: '',
     password: '',
@@ -135,6 +137,16 @@ const clearForm = () => {
     gender: '',
   }
 }
+
+// const clearForm = () => {
+//   formData.value = {
+//     username: '',
+//     password: '',
+//     isAustralian: false,
+//     reason: '',
+//     gender: '',
+//   }
+// }
 </script>
 
 <style scoped>
