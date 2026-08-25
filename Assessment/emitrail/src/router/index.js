@@ -1,10 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import HomeView from '../views/HomeView.vue'
-import CompareTravelView from '../views/CompareTravelView.vue'
-import ExplorePlacesView from '../views/ExplorePlacesView.vue'
-import MyImpactView from '../views/MyImpactView.vue'
-import AboutView from '../views/AboutView.vue'
+import Home from '../views/Home.vue'
+import CompareTravel from '../views/CompareTravel.vue'
+import ExplorePlaces from '../views/ExplorePlaces.vue'
+import MyImpact from '../views/MyImpact.vue'
+import About from '../views/About.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -13,27 +13,27 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView,
+      component: Home,
     },
     {
       path: '/compare',
       name: 'compare',
-      component: CompareTravelView,
+      component: CompareTravel,
     },
     {
       path: '/explore',
       name: 'explore',
-      component: ExplorePlacesView,
+      component: ExplorePlaces,
     },
     {
       path: '/impact',
       name: 'impact',
-      component: MyImpactView,
+      component: MyImpact,
     },
     {
       path: '/about',
       name: 'about',
-      component: AboutView,
+      component: About,
     },
   ],
 })
