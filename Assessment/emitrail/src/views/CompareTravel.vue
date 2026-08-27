@@ -230,9 +230,14 @@ const compareTravel = () => {
 .travel-card .card-details {
   min-height: 120px;
 }
-@media (max-width: 768px) {
+/* Adjust result cards for mobile screens */
+@media (max-width: 767.98px) {
   .results-section {
     min-height: auto;
+  }
+
+  .travel-card {
+    min-height: 170px;
   }
 }
 </style>
