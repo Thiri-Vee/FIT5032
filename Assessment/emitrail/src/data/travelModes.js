@@ -1,3 +1,4 @@
+//different travel modes - use in compare travel page- mock data
 export const travelModes = [
   {
     id: 1,
