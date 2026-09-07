@@ -1,6 +1,9 @@
 <script setup>
 import { reactive, ref } from 'vue'
-import { loginUser } from '../auth/auth'
+import { useRouter } from 'vue-router'
+import { loginUser } from '../auth/auth.js'
+
+const router = useRouter()
 
 const form = reactive({
   email: '',
@@ -48,7 +51,9 @@ const handleLogin = () => {
     return
   }
 
-  message.value = `Welcome, ${result.user.name}!`
+  // Reload the app so the navbar updates immediately
+  router.push('/')
+  window.location.reload()
 }
 </script>
 

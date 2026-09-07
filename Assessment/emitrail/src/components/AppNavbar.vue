@@ -1,3 +1,20 @@
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { getCurrentUser, logoutUser } from '../auth/auth.js'
+
+const router = useRouter()
+
+// Store the currently logged-in user
+const currentUser = ref(getCurrentUser())
+
+// Log the current user out
+const handleLogout = () => {
+  logoutUser()
+  currentUser.value = null
+  router.push('/login')
+}
+</script>
 <template>
   <!-- Responsive navigation bar using Bootstrap -->
   <nav class="navbar navbar-expand-lg bg-white border-bottom">
@@ -42,6 +59,30 @@
           <li class="nav-item">
             <RouterLink class="nav-link" to="/about"> About </RouterLink>
           </li>
+          <!-- Authentication links -->
+          <!-- Show these links when the user is not logged in -->
+          <template v-if="!currentUser">
+            <li class="nav-item">
+              <RouterLink class="nav-link" to="/login"> Login </RouterLink>
+            </li>
+
+            <li class="nav-item">
+              <RouterLink class="nav-link" to="/register"> Register </RouterLink>
+            </li>
+          </template>
+
+          <!-- Show the user and logout button when logged in -->
+          <template v-else>
+            <li class="nav-item">
+              <span class="nav-link"> Hi, {{ currentUser.name }} </span>
+            </li>
+
+            <li class="nav-item">
+              <button class="nav-link btn btn-link" type="button" @click="handleLogout">
+                Logout
+              </button>
+            </li>
+          </template>
         </ul>
       </div>
     </div>

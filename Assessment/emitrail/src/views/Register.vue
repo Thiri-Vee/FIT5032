@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref } from 'vue'
-import { registerUser } from '../auth/auth'
+import { registerUser } from '../auth/auth.js'
 
 const form = reactive({
   name: '',
