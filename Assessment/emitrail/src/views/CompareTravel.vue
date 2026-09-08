@@ -1,8 +1,13 @@
 <script setup>
-//travelmodes mock data imported
-import { computed, reactive, ref } from 'vue'
+import { getCurrentUser } from '../auth/auth.js'
+// Vue functions used for form data, calculated results and page loading
+import { computed, onMounted, reactive, ref } from 'vue'
+
+// Travel mode mock data
 import { travelModes } from '../data/travelModes'
 
+// Functions used to save and calculate ratings
+import { getAverageRating, getRatings, saveRating } from '../data/ratings.js'
 // Store values entered in the travel form
 const form = reactive({
   startLocation: '',
@@ -16,8 +21,53 @@ const errors = reactive({
   destination: '',
   distance: '',
 })
-
+const currentUser = getCurrentUser()
 const formSubmitted = ref(false)
+
+// Rating values for the travel comparison
+const selectedRating = ref(0)
+const averageRating = ref(0)
+const ratingCount = ref(0)
+const ratingMessage = ref('')
+
+// Update the average rating and total number of ratings
+const loadRatingSummary = () => {
+  const ratings = getRatings()
+
+  averageRating.value = getAverageRating()
+  ratingCount.value = ratings.length
+}
+
+// Save the user's rating
+const submitRating = () => {
+  ratingMessage.value = ''
+
+  if (selectedRating.value < 1 || selectedRating.value > 5) {
+    ratingMessage.value = 'Please select a rating from 1 to 5.'
+    return
+  }
+
+  if (!currentUser) {
+    ratingMessage.value = 'Please log in before submitting a rating.'
+    return
+  }
+
+  saveRating({
+    id: Date.now(),
+    userId: currentUser.id,
+    score: selectedRating.value,
+  })
+
+  ratingMessage.value = 'Thank you for your rating.'
+  selectedRating.value = 0
+
+  loadRatingSummary()
+}
+
+// Load existing ratings when the page opens
+onMounted(() => {
+  loadRatingSummary()
+})
 
 // Location must contain at least one letter
 const locationPattern = /[A-Za-z]/
@@ -195,6 +245,44 @@ const compareTravel = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+        <!-- Travel comparison rating -->
+        <section class="mt-5">
+          <div class="card p-4 shadow-sm">
+            <h2 class="h4 mb-3">Rate the Travel Comparison</h2>
+
+            <p class="mb-2">How useful was this travel comparison?</p>
+
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <button
+                v-for="score in 5"
+                :key="score"
+                type="button"
+                class="btn"
+                :class="selectedRating === score ? 'btn-success' : 'btn-outline-success'"
+                @click="selectedRating = score"
+              >
+                {{ score }}
+              </button>
+            </div>
+
+            <button type="button" class="btn btn-success" @click="submitRating">
+              Submit Rating
+            </button>
+
+            <p v-if="ratingMessage" class="mt-3 mb-0">
+              {{ ratingMessage }}
+            </p>
+
+            <hr />
+
+            <p class="mb-1">
+              <strong>Average Rating:</strong>
+              {{ averageRating }} / 5
+            </p>
+
+            <p class="mb-0">Based on {{ ratingCount }} rating(s)</p>
           </div>
         </section>
       </div>
