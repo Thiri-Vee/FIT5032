@@ -70,11 +70,15 @@ const handleLogout = () => {
               <RouterLink class="nav-link" to="/register"> Register </RouterLink>
             </li>
           </template>
-
           <!-- Show the user and logout button when logged in -->
           <template v-else>
             <li class="nav-item">
               <span class="nav-link"> Hi, {{ currentUser.name }} </span>
+            </li>
+
+            <!-- Only admin users can see the Admin Dashboard -->
+            <li v-if="currentUser?.role === 'admin'" class="nav-item">
+              <RouterLink class="nav-link" to="/admin"> Admin Dashboard </RouterLink>
             </li>
 
             <li class="nav-item">
