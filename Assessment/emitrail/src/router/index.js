@@ -8,6 +8,9 @@ import About from '../views/About.vue'
 //added login and registers BR category C
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
+//added admin router for role base auth
+import Admin from '../views/Admin.vue'
+import { getCurrentUser } from '../auth/auth.js'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
@@ -47,7 +50,29 @@ const router = createRouter({
       name: 'register',
       component: Register,
     },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: Admin,
+      meta: {
+        requiresAuth: true,
+        role: 'admin',
+      },
+    },
   ],
+})
+router.beforeEach((to) => {
+  const currentUser = getCurrentUser()
+
+  // Block pages that require login
+  if (to.meta.requiresAuth && !currentUser) {
+    return '/login'
+  }
+
+  // Block users who do not have the required role
+  if (to.meta.role && currentUser?.role !== to.meta.role) {
+    return '/'
+  }
 })
 
 export default router

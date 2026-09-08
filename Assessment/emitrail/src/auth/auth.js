@@ -1,8 +1,25 @@
 // Get all registered users from localStorage
+// Get registered users and create a default admin account
 export const getUsers = () => {
-  const users = localStorage.getItem('emitrailUsers')
+  const storedUsers = localStorage.getItem('emitrailUsers')
+  const users = storedUsers ? JSON.parse(storedUsers) : []
 
-  return users ? JSON.parse(users) : []
+  const adminExists = users.some((user) => user.email === 'admin@emitrail.com')
+
+  // Add a default admin account if it does not exist
+  if (!adminExists) {
+    users.push({
+      id: 'admin-1',
+      name: 'Emitrail Admin',
+      email: 'admin@emitrail.com',
+      password: 'admin123',
+      role: 'admin',
+    })
+
+    localStorage.setItem('emitrailUsers', JSON.stringify(users))
+  }
+
+  return users
 }
 
 // Save all users into localStorage
