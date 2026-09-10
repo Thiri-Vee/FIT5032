@@ -1,7 +1,8 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { registerUser } from '../auth/auth.js'
-
+//calling security info
+import { containsUnsafeContent, sanitizeText } from '../security/security.js'
 const form = reactive({
   name: '',
   email: '',
@@ -28,13 +29,20 @@ const validateForm = () => {
   errors.confirmPassword = ''
   message.value = ''
 
+  //updated validation requirement
   if (!form.name.trim()) {
     errors.name = 'Name is required.'
     isValid = false
+  } else if (containsUnsafeContent(form.name)) {
+    errors.name = 'Name contains invalid content.'
+    isValid = false
   }
-
+  //updated email validation for unsafe content and missing @ characters
   if (!form.email.trim()) {
     errors.email = 'Email is required.'
+    isValid = false
+  } else if (containsUnsafeContent(form.email)) {
+    errors.email = 'Email contains invalid content.'
     isValid = false
   } else if (!form.email.includes('@')) {
     errors.email = 'Please enter a valid email.'
@@ -66,7 +74,11 @@ const handleRegister = () => {
     return
   }
 
-  const result = registerUser(form.name.trim(), form.email.trim(), form.password)
+  const safeName = sanitizeText(form.name)
+  const safeEmail = sanitizeText(form.email)
+
+  const result = registerUser(safeName, safeEmail, form.password)
+  //const result = registerUser(form.name.trim(), form.email.trim(), form.password)
 
   message.value = result.message
 
