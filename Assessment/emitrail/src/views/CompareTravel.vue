@@ -312,11 +312,14 @@ const compareTravel = () => {
 </template>
 
 <style scoped>
+/* Results area */
 .results-section {
   background-color: #dedede;
   min-height: 420px;
+  border-radius: 8px;
 }
 
+/* Form inputs */
 .form-control {
   min-height: 48px;
 }
@@ -325,31 +328,69 @@ const compareTravel = () => {
 .travel-card {
   background-color: #b8e8ba;
   min-height: 330px;
+
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+
+  border-radius: 8px;
 }
 
+/* Keep travel mode headings aligned */
 .travel-card h3 {
   min-height: 60px;
+
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
 }
 
+/* Keep card details aligned */
 .travel-card .card-details {
   min-height: 120px;
 }
 
-/* Adjust result cards for mobile screens */
-@media (max-width: 767.98px) {
+/* Tablet and smaller screens */
+@media (max-width: 991.98px) {
   .results-section {
     min-height: auto;
   }
 
   .travel-card {
-    min-height: 170px;
+    min-height: 220px;
+  }
+}
+
+/* Mobile screens */
+@media (max-width: 575.98px) {
+  /* Reduce page spacing on small screens */
+  .container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* Reduce results padding on mobile */
+  .results-section {
+    padding: 20px !important;
+  }
+
+  /* Cards do not need to be tall on mobile */
+  .travel-card {
+    min-height: 160px;
+  }
+
+  .travel-card h3 {
+    min-height: auto;
+  }
+
+  .travel-card .card-details {
+    min-height: auto;
+  }
+
+  /* Make form button easier to use on mobile */
+  form .btn {
+    width: 100%;
   }
 }
 </style>
