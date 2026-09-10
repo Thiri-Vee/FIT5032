@@ -92,15 +92,17 @@ const handleRegister = () => {
 </script>
 
 <template>
-  <div class="container py-5">
+  <div class="container py-5 register-page">
     <div class="row justify-content-center">
-      <div class="col-12 col-md-8 col-lg-5">
-        <div class="card p-4 shadow-sm">
+      <!-- Responsive registration form width -->
+      <div class="col-12 col-sm-11 col-md-9 col-lg-7 col-xl-6">
+        <div class="card p-4 shadow-sm register-card">
           <h1 class="h3 text-center mb-4">Register</h1>
 
           <form @submit.prevent="handleRegister" novalidate>
+            <!-- Name -->
             <div class="mb-3">
-              <label for="name" class="form-label">Name</label>
+              <label for="name" class="form-label"> Name </label>
 
               <input
                 id="name"
@@ -115,8 +117,9 @@ const handleRegister = () => {
               </div>
             </div>
 
+            <!-- Email -->
             <div class="mb-3">
-              <label for="email" class="form-label">Email</label>
+              <label for="email" class="form-label"> Email </label>
 
               <input
                 id="email"
@@ -131,8 +134,9 @@ const handleRegister = () => {
               </div>
             </div>
 
+            <!-- Password -->
             <div class="mb-3">
-              <label for="password" class="form-label">Password</label>
+              <label for="password" class="form-label"> Password </label>
 
               <input
                 id="password"
@@ -147,7 +151,8 @@ const handleRegister = () => {
               </div>
             </div>
 
-            <div class="mb-3">
+            <!-- Confirm password -->
+            <div class="mb-4">
               <label for="confirmPassword" class="form-label"> Confirm Password </label>
 
               <input
@@ -163,14 +168,40 @@ const handleRegister = () => {
               </div>
             </div>
 
+            <!-- Register button -->
             <button type="submit" class="btn btn-success w-100">Register</button>
-          </form>
 
-          <p v-if="message" class="text-center mt-3 mb-0">
-            {{ message }}
-          </p>
+            <!-- Registration message -->
+            <p v-if="message" class="text-center mt-3 mb-0">
+              {{ message }}
+            </p>
+          </form>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Registration card styling */
+.register-card {
+  border-radius: 10px;
+}
+
+/* Make form fields easier to use */
+.form-control {
+  min-height: 48px;
+}
+
+/* Mobile screens */
+@media (max-width: 575.98px) {
+  .register-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .register-card {
+    padding: 20px !important;
+  }
+}
+</style>

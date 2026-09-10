@@ -5,11 +5,13 @@ import { loginUser } from '../auth/auth.js'
 
 const router = useRouter()
 
+// Store login form values
 const form = reactive({
   email: '',
   password: '',
 })
 
+// Store validation messages
 const errors = reactive({
   email: '',
   password: '',
@@ -58,13 +60,15 @@ const handleLogin = () => {
 </script>
 
 <template>
-  <div class="container py-5">
+  <div class="container py-5 login-page">
     <div class="row justify-content-center">
-      <div class="col-12 col-md-8 col-lg-5">
-        <div class="card p-4 shadow-sm">
+      <!-- Responsive login form width -->
+      <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+        <div class="card p-4 shadow-sm login-card">
           <h1 class="h3 text-center mb-4">Login</h1>
 
           <form @submit.prevent="handleLogin" novalidate>
+            <!-- Email -->
             <div class="mb-3">
               <label for="loginEmail" class="form-label"> Email </label>
 
@@ -81,7 +85,8 @@ const handleLogin = () => {
               </div>
             </div>
 
-            <div class="mb-3">
+            <!-- Password -->
+            <div class="mb-4">
               <label for="loginPassword" class="form-label"> Password </label>
 
               <input
@@ -97,9 +102,11 @@ const handleLogin = () => {
               </div>
             </div>
 
+            <!-- Login button -->
             <button type="submit" class="btn btn-success w-100">Login</button>
           </form>
 
+          <!-- Login error message -->
           <p v-if="message" class="text-center mt-3 mb-0">
             {{ message }}
           </p>
@@ -108,3 +115,27 @@ const handleLogin = () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Login card styling */
+.login-card {
+  border-radius: 10px;
+}
+
+/* Make inputs easier to use */
+.form-control {
+  min-height: 48px;
+}
+
+/* Mobile screens */
+@media (max-width: 575.98px) {
+  .login-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .login-card {
+    padding: 20px !important;
+  }
+}
+</style>
