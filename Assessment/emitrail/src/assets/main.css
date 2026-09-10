@@ -1,5 +1,16 @@
 /* Global styles for Emitrail */
 
+/* Brand palette and shared spacing tokens */
+:root {
+  --brand-green: #b8e8ba;
+  --brand-green-strong: #6fbf73;
+  --brand-green-dark: #2f7a3a;
+  --brand-ink: #222;
+  --brand-muted: #5c5c5c;
+  --brand-surface: #f4f7f4;
+  --brand-line: #e3e6e3;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -13,4 +24,65 @@ body {
 
 #app {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  /* Guard against small horizontal scroll from wide rows on narrow screens */
+  overflow-x: hidden;
+}
+
+#app > main {
+  flex: 1;
+}
+
+/* Shared display font for headings and the brand wordmark */
+.brand-font {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+/* Soft brand-tinted section background */
+.section-soft {
+  background-color: var(--brand-surface);
+}
+
+/* Simple eyebrow label used above section headings */
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--brand-green-dark);
+}
+
+/* Rounded icon tile used on feature cards */
+.icon-tile {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--brand-green);
+  color: var(--brand-ink);
+}
+
+/* Keep long illustrations from overflowing their column */
+.illustration {
+  width: 100%;
+  height: auto;
+}
+
+/* Filled brand button, used for primary actions across pages.
+   Scoped with .btn.btn-brand so it wins over Bootstrap's .btn base rule. */
+.btn.btn-brand {
+  background-color: var(--brand-green);
+  border: 1px solid var(--brand-green);
+  color: #1c1c1c;
+  font-weight: 600;
+}
+
+.btn.btn-brand:hover,
+.btn.btn-brand:focus-visible {
+  background-color: var(--brand-green-strong);
+  border-color: var(--brand-green-strong);
+  color: #1c1c1c;
 }

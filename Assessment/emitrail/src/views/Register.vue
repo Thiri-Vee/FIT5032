@@ -93,11 +93,28 @@ const handleRegister = () => {
 
 <template>
   <div class="container py-5 register-page">
-    <div class="row justify-content-center">
-      <!-- Responsive registration form width -->
-      <div class="col-12 col-sm-11 col-md-9 col-lg-7 col-xl-6">
-        <div class="card p-4 shadow-sm register-card">
-          <h1 class="h3 text-center mb-4">Register</h1>
+    <div class="row justify-content-center align-items-stretch g-0 shadow-sm auth-shell">
+      <!-- Welcome panel -->
+      <div class="col-lg-5 d-none d-lg-block">
+        <div class="auth-aside h-100 text-white p-4 d-flex flex-column justify-content-between">
+          <div>
+            <p class="eyebrow text-white-50 mb-2">Join Emitrail</p>
+            <h2 class="brand-font fw-bold">Turn everyday trips into climate action</h2>
+            <ul class="list-unstyled d-grid gap-2 mt-3 mb-0 text-white-50">
+              <li>• Compare the impact of every journey</li>
+              <li>• Track distance, trips and emissions avoided</li>
+              <li>• Join challenges and earn milestone badges</li>
+            </ul>
+          </div>
+          <img src="/images/auth-side.svg" alt="" class="auth-aside-img mt-3" />
+        </div>
+      </div>
+
+      <!-- Registration form -->
+      <div class="col-12 col-sm-11 col-md-9 col-lg-7">
+        <div class="card border-0 p-4 p-md-5 register-card h-100">
+          <h1 class="h3 mb-1">Create your account</h1>
+          <p class="text-muted mb-4">It only takes a minute.</p>
 
           <form @submit.prevent="handleRegister" novalidate>
             <!-- Name -->
@@ -183,9 +200,28 @@ const handleRegister = () => {
 </template>
 
 <style scoped>
+/* Rounded outer container that holds the panel and the form */
+.auth-shell {
+  max-width: 980px;
+  margin-inline: auto;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Green welcome panel */
+.auth-aside {
+  background-color: var(--brand-green-dark);
+}
+
+.auth-aside-img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
 /* Registration card styling */
 .register-card {
-  border-radius: 10px;
+  border-radius: 0;
 }
 
 /* Make form fields easier to use */

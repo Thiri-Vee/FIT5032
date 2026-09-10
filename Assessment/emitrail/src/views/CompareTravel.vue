@@ -1,6 +1,9 @@
 <script setup>
 import { getCurrentUser } from '../auth/auth.js'
 
+// Presentational icon component
+import AppIcon from '../components/AppIcon.vue'
+
 // Vue functions used for form data, calculated results and page loading
 import { computed, onMounted, reactive, ref } from 'vue'
 
@@ -172,140 +175,195 @@ const compareTravel = () => {
 </script>
 
 <template>
-  <div class="container py-5">
-    <h1 class="fw-bold mb-4">Compare Travel</h1>
-
-    <div class="row g-5">
-      <!-- Travel comparison form -->
-      <div class="col-12 col-lg-4">
-        <form @submit.prevent="compareTravel" novalidate>
-          <!-- Start location -->
-          <div class="mb-4">
-            <label for="startLocation" class="form-label fw-bold"> Start location </label>
-
-            <input
-              id="startLocation"
-              v-model="form.startLocation"
-              type="text"
-              class="form-control"
-              :class="{ 'is-invalid': errors.startLocation }"
-              @input="clearError('startLocation')"
-            />
-
-            <div class="invalid-feedback">
-              {{ errors.startLocation }}
-            </div>
+  <div class="compare-page">
+    <!-- Page intro -->
+    <section class="section-soft border-bottom">
+      <div class="container py-5">
+        <div class="row justify-content-center text-center">
+          <div class="col-12 col-lg-9">
+            <p class="eyebrow mb-2">Active travel comparison</p>
+            <h1 class="fw-bold mb-3">Compare how you travel</h1>
+            <p class="lead text-muted mb-0">
+              Enter a journey and compare walking, cycling, public transport and car travel by
+              distance and estimated emissions, using established published emission-factor data.
+            </p>
           </div>
-
-          <!-- Destination -->
-          <div class="mb-4">
-            <label for="destination" class="form-label fw-bold"> Destination </label>
-
-            <input
-              id="destination"
-              v-model="form.destination"
-              type="text"
-              class="form-control"
-              :class="{ 'is-invalid': errors.destination }"
-              @input="clearError('destination')"
-            />
-
-            <div class="invalid-feedback">
-              {{ errors.destination }}
-            </div>
-          </div>
-
-          <!-- Travel distance -->
-          <div class="mb-4">
-            <label for="distance" class="form-label fw-bold"> Distance (km) </label>
-
-            <input
-              id="distance"
-              v-model="form.distance"
-              type="number"
-              min="0.1"
-              step="0.1"
-              class="form-control"
-              :class="{ 'is-invalid': errors.distance }"
-              @input="clearError('distance')"
-            />
-
-            <div class="invalid-feedback">
-              {{ errors.distance }}
-            </div>
-          </div>
-
-          <button type="submit" class="btn btn-dark px-4">Compare</button>
-        </form>
+        </div>
       </div>
+    </section>
 
-      <!-- Result area -->
-      <div class="col-12 col-lg-8">
-        <section class="results-section p-4">
-          <h2 class="fw-bold mb-4">Results</h2>
+    <div class="container py-5">
+      <div class="row g-4 g-lg-5">
+        <!-- Travel comparison form -->
+        <div class="col-12 col-lg-4">
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+              <h2 class="h5 fw-bold mb-3">Journey details</h2>
 
-          <p v-if="!formSubmitted" class="text-muted">
-            Enter your journey information to compare travel options.
-          </p>
+              <form @submit.prevent="compareTravel" novalidate>
+                <!-- Start location -->
+                <div class="mb-4">
+                  <label for="startLocation" class="form-label fw-bold"> Start location </label>
 
-          <div v-else class="row g-3">
-            <!-- Display a result card for each travel mode -->
-            <div v-for="mode in comparisonResults" :key="mode.id" class="col-12 col-md-6 col-xl-3">
-              <div class="travel-card h-100 p-4">
-                <h3 class="h5 text-center">
-                  {{ mode.name }}
-                </h3>
+                  <input
+                    id="startLocation"
+                    v-model="form.startLocation"
+                    type="text"
+                    class="form-control"
+                    :class="{ 'is-invalid': errors.startLocation }"
+                    @input="clearError('startLocation')"
+                  />
 
-                <div class="card-details">
-                  <strong> {{ mode.emissions }} kg CO₂ </strong>
+                  <div class="invalid-feedback">
+                    {{ errors.startLocation }}
+                  </div>
+                </div>
 
-                  <p class="small mb-0 mt-2">
-                    {{ mode.description }}
-                  </p>
+                <!-- Destination -->
+                <div class="mb-4">
+                  <label for="destination" class="form-label fw-bold"> Destination </label>
+
+                  <input
+                    id="destination"
+                    v-model="form.destination"
+                    type="text"
+                    class="form-control"
+                    :class="{ 'is-invalid': errors.destination }"
+                    @input="clearError('destination')"
+                  />
+
+                  <div class="invalid-feedback">
+                    {{ errors.destination }}
+                  </div>
+                </div>
+
+                <!-- Travel distance -->
+                <div class="mb-4">
+                  <label for="distance" class="form-label fw-bold"> Distance (km) </label>
+
+                  <input
+                    id="distance"
+                    v-model="form.distance"
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    class="form-control"
+                    :class="{ 'is-invalid': errors.distance }"
+                    @input="clearError('distance')"
+                  />
+
+                  <div class="invalid-feedback">
+                    {{ errors.distance }}
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-dark px-4 w-100">Compare</button>
+              </form>
+
+              <p class="small text-muted mt-3 mb-0">
+                Distances stay on your device. Only the most recent valid comparison is saved
+                locally.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Result area -->
+        <div class="col-12 col-lg-8">
+          <section class="results-section p-4">
+            <h2 class="fw-bold mb-4">Results</h2>
+
+            <!-- Empty state before a comparison is run -->
+            <div v-if="!formSubmitted" class="text-center py-4">
+              <img
+                src="/images/compare-empty.svg"
+                alt=""
+                class="illustration mb-3"
+                style="max-width: 320px"
+              />
+              <p class="text-muted mb-0">
+                Enter your journey information to compare travel options.
+              </p>
+            </div>
+
+            <div v-else class="row g-3">
+              <!-- Display a result card for each travel mode -->
+              <div
+                v-for="mode in comparisonResults"
+                :key="mode.id"
+                class="col-12 col-md-6 col-xl-3"
+              >
+                <div class="travel-card h-100 p-4">
+                  <span class="mode-icon mb-2">
+                    <AppIcon
+                      :name="
+                        {
+                          Walking: 'walk',
+                          Cycling: 'bike',
+                          'Public Transport': 'bus',
+                          Car: 'car',
+                        }[mode.name] || 'route'
+                      "
+                      :size="28"
+                    />
+                  </span>
+
+                  <h3 class="h5 text-center">
+                    {{ mode.name }}
+                  </h3>
+
+                  <div class="card-details">
+                    <strong> {{ mode.emissions }} kg CO₂ </strong>
+
+                    <p class="small mb-0 mt-2">
+                      {{ mode.description }}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <!-- Travel comparison rating -->
-        <section class="mt-5">
-          <div class="card p-4 shadow-sm">
-            <h2 class="h4 mb-3">Rate the Travel Comparison</h2>
+          <!-- Travel comparison rating -->
+          <section class="mt-5">
+            <div class="card p-4 shadow-sm">
+              <h2 class="h4 mb-3">Rate the Travel Comparison</h2>
 
-            <p class="mb-2">How useful was this travel comparison?</p>
+              <p class="mb-2">How useful was this travel comparison?</p>
 
-            <div class="d-flex flex-wrap gap-2 mb-3">
-              <button
-                v-for="score in 5"
-                :key="score"
-                type="button"
-                class="btn"
-                :class="selectedRating === score ? 'btn-success' : 'btn-outline-success'"
-                @click="selectedRating = score"
-              >
-                {{ score }}
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                <button
+                  v-for="score in 5"
+                  :key="score"
+                  type="button"
+                  class="btn d-inline-flex align-items-center gap-1"
+                  :class="selectedRating === score ? 'btn-success' : 'btn-outline-success'"
+                  @click="selectedRating = score"
+                >
+                  <AppIcon name="star" :size="16" />
+                  {{ score }}
+                </button>
+              </div>
+
+              <button type="button" class="btn btn-success" @click="submitRating">
+                Submit Rating
               </button>
+
+              <p v-if="ratingMessage" class="mt-3 mb-0">
+                {{ ratingMessage }}
+              </p>
+
+              <hr />
+
+              <p class="mb-1">
+                <strong>Average Rating:</strong>
+                {{ averageRating }} / 5
+              </p>
+
+              <p class="mb-0">Based on {{ ratingCount }} rating(s)</p>
             </div>
-
-            <button type="button" class="btn btn-success" @click="submitRating">
-              Submit Rating
-            </button>
-
-            <p v-if="ratingMessage" class="mt-3 mb-0">
-              {{ ratingMessage }}
-            </p>
-
-            <hr />
-
-            <p class="mb-1">
-              <strong>Average Rating:</strong>
-              {{ averageRating }} / 5
-            </p>
-
-            <p class="mb-0">Based on {{ ratingCount }} rating(s)</p>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </div>
   </div>
@@ -344,6 +402,20 @@ const compareTravel = () => {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+/* Circular icon badge on each result card */
+.mode-icon {
+  align-self: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  color: #1c1c1c;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Keep card details aligned */

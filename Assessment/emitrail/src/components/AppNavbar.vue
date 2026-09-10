@@ -18,11 +18,12 @@ const handleLogout = () => {
 
 <template>
   <!-- Responsive navigation bar using Bootstrap -->
-  <nav class="navbar navbar-expand-xl bg-white border-bottom">
+  <nav class="navbar navbar-expand-lg bg-white border-bottom py-2">
     <div class="container-fluid px-3 px-lg-4">
       <!-- Logo links back to the home page -->
-      <RouterLink class="navbar-brand d-flex align-items-center me-3" to="/">
-        <div class="logo-circle">EMITRAIL</div>
+      <RouterLink class="navbar-brand d-flex align-items-center gap-2 me-3" to="/">
+        <img src="/images/logo.svg" alt="" width="40" height="40" />
+        <span class="brand-font brand-wordmark">EMITRAIL</span>
       </RouterLink>
 
       <!-- Button appears when the screen becomes smaller -->
@@ -40,119 +41,113 @@ const handleLogout = () => {
 
       <!-- Navigation links collapse into the mobile menu -->
       <div id="emitrailNavbar" class="collapse navbar-collapse">
-        <ul class="navbar-nav ms-auto align-items-xl-center">
+        <!-- Primary sections -->
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item">
-            <RouterLink class="nav-link" to="/"> Home </RouterLink>
+            <RouterLink class="nav-link" to="/">Home</RouterLink>
           </li>
 
           <li class="nav-item">
-            <RouterLink class="nav-link" to="/compare"> Compare Travel </RouterLink>
+            <RouterLink class="nav-link" to="/compare">Compare</RouterLink>
           </li>
 
           <li class="nav-item">
-            <RouterLink class="nav-link" to="/explore"> Explore Places </RouterLink>
+            <RouterLink class="nav-link" to="/explore">Explore</RouterLink>
           </li>
 
           <li class="nav-item">
-            <RouterLink class="nav-link" to="/impact"> My Impact </RouterLink>
+            <RouterLink class="nav-link" to="/impact">My Impact</RouterLink>
           </li>
 
           <li class="nav-item">
-            <RouterLink class="nav-link" to="/about"> About </RouterLink>
+            <RouterLink class="nav-link" to="/about">About</RouterLink>
           </li>
+        </ul>
 
+        <!-- Account actions, visually separated from the main sections -->
+        <div
+          class="nav-actions d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-2"
+        >
           <!-- Show login and register when the user is not logged in -->
           <template v-if="!currentUser">
-            <li class="nav-item">
-              <RouterLink class="nav-link" to="/login"> Login </RouterLink>
-            </li>
-
-            <li class="nav-item">
-              <RouterLink class="nav-link" to="/register"> Register </RouterLink>
-            </li>
+            <RouterLink class="btn btn-link nav-auth-link" to="/login">Login</RouterLink>
+            <RouterLink class="btn btn-brand" to="/register">Register</RouterLink>
           </template>
 
           <!-- Show admin link and logout when the user is logged in -->
           <template v-else>
+            <span class="navbar-text small text-muted d-none d-lg-inline">
+              Hi, {{ currentUser.name }}
+            </span>
+
             <!-- Only show Admin Dashboard to admin users -->
-            <li v-if="currentUser?.role === 'admin'" class="nav-item">
-              <RouterLink class="nav-link" to="/admin"> Admin Dashboard </RouterLink>
-            </li>
+            <RouterLink
+              v-if="currentUser?.role === 'admin'"
+              class="btn btn-link nav-auth-link"
+              to="/admin"
+            >
+              Admin Dashboard
+            </RouterLink>
 
             <!-- Logout button -->
-            <li class="nav-item">
-              <button class="nav-link btn btn-link" type="button" @click="handleLogout">
-                Logout
-              </button>
-            </li>
+            <button class="btn btn-outline-dark btn-sm" type="button" @click="handleLogout">
+              Logout
+            </button>
           </template>
-        </ul>
+        </div>
       </div>
     </div>
   </nav>
 </template>
 
 <style scoped>
-/* Emitrail logo */
-.logo-circle {
-  width: 65px;
-  height: 65px;
-  border-radius: 50%;
-  background: #b8e8ba;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  font-family: Georgia, serif;
-  font-weight: 600;
-  font-size: 15px;
+/* Emitrail wordmark next to the logo */
+.brand-wordmark {
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.03em;
+  color: #1c1c1c;
 }
 
 /* Navigation links */
 .nav-link {
-  color: #222;
-  padding: 10px 12px !important;
+  color: #333;
+  padding: 8px 12px !important;
   border-radius: 6px;
   white-space: nowrap;
 }
 
+.nav-link:hover {
+  background-color: #f0f5f0;
+}
+
 /* Highlight the current page */
 .router-link-active.nav-link {
-  background-color: #b8e8ba;
+  background-color: var(--brand-green);
+  color: #1c1c1c;
+}
+
+/* Plain text link style for the secondary account action */
+.nav-auth-link {
+  color: #333;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.nav-auth-link:hover {
+  color: var(--brand-green-dark);
 }
 
 /* Tablet and smaller screens */
-@media (max-width: 1199.98px) {
+@media (max-width: 991.98px) {
   .navbar-collapse {
-    margin-top: 15px;
+    margin-top: 12px;
   }
 
-  .nav-link {
-    padding: 10px !important;
-  }
-
-  .navbar-nav {
-    gap: 4px;
-  }
-}
-
-/* Mobile screens */
-@media (max-width: 575.98px) {
-  .logo-circle {
-    width: 55px;
-    height: 55px;
-    font-size: 13px;
-  }
-
-  .navbar {
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-
-  .nav-link {
-    width: 100%;
-    padding: 10px !important;
+  .nav-actions {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--brand-line);
   }
 }
 </style>

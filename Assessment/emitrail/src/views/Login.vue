@@ -61,11 +61,26 @@ const handleLogin = () => {
 
 <template>
   <div class="container py-5 login-page">
-    <div class="row justify-content-center">
-      <!-- Responsive login form width -->
-      <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
-        <div class="card p-4 shadow-sm login-card">
-          <h1 class="h3 text-center mb-4">Login</h1>
+    <div class="row justify-content-center align-items-stretch g-0 shadow-sm auth-shell">
+      <!-- Welcome panel -->
+      <div class="col-lg-5 d-none d-lg-block">
+        <div class="auth-aside h-100 text-white p-4 d-flex flex-column justify-content-between">
+          <div>
+            <p class="eyebrow text-white-50 mb-2">Welcome back</p>
+            <h2 class="brand-font fw-bold">Pick up where you left off</h2>
+            <p class="mb-0 text-white-50">
+              Log in to record journeys, follow your climate impact and join community challenges.
+            </p>
+          </div>
+          <img src="/images/auth-side.svg" alt="" class="auth-aside-img mt-3" />
+        </div>
+      </div>
+
+      <!-- Login form -->
+      <div class="col-12 col-sm-10 col-md-8 col-lg-7">
+        <div class="card border-0 p-4 p-md-5 login-card h-100">
+          <h1 class="h3 mb-1">Log in</h1>
+          <p class="text-muted mb-4">Enter your details to continue.</p>
 
           <form @submit.prevent="handleLogin" novalidate>
             <!-- Email -->
@@ -117,9 +132,28 @@ const handleLogin = () => {
 </template>
 
 <style scoped>
+/* Rounded outer container that holds the panel and the form */
+.auth-shell {
+  max-width: 940px;
+  margin-inline: auto;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Green welcome panel */
+.auth-aside {
+  background-color: var(--brand-green-dark);
+}
+
+.auth-aside-img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
 /* Login card styling */
 .login-card {
-  border-radius: 10px;
+  border-radius: 0;
 }
 
 /* Make inputs easier to use */

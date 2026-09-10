@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Parks and green space">
+  <rect width="400" height="240" fill="#eef6ef"/>
+  <path d="M0 175c70-25 120 10 200 0s120-25 200-5v70H0z" fill="#8ccf92"/>
+  <ellipse cx="200" cy="205" rx="150" ry="20" fill="#a9dcac"/>
+  <g fill="#2f7a3a">
+    <circle cx="110" cy="120" r="42"/><rect x="104" y="150" width="12" height="46"/>
+    <circle cx="285" cy="135" r="34"/><rect x="279" y="160" width="12" height="40"/>
+  </g>
+  <circle cx="110" cy="120" r="42" fill="none" stroke="#6fbf73" stroke-width="6" opacity="0.5"/>
+  <path d="M150 210q50-40 100 0" fill="none" stroke="#f4f7f4" stroke-width="16" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 440" role="img" aria-label="Rising climate impact dashboard">
+  <defs><clipPath id="impFrame"><rect width="640" height="440" rx="24"/></clipPath></defs>
+  <g clip-path="url(#impFrame)">
+    <rect width="640" height="440" fill="#eef6ef"/>
+
+    <!-- dashboard card -->
+    <rect x="90" y="70" width="460" height="300" rx="18" fill="#ffffff"/>
+    <rect x="90" y="70" width="460" height="46" rx="18" fill="#b8e8ba"/>
+    <circle cx="116" cy="93" r="6" fill="#2f7a3a"/><circle cx="134" cy="93" r="6" fill="#6fbf73"/>
+
+    <!-- bars -->
+    <g fill="#b8e8ba">
+      <rect x="130" y="250" width="46" height="80" rx="6"/>
+      <rect x="196" y="210" width="46" height="120" rx="6"/>
+      <rect x="262" y="230" width="46" height="100" rx="6"/>
+      <rect x="328" y="170" width="46" height="160" rx="6"/>
+      <rect x="394" y="140" width="46" height="190" rx="6"/>
+    </g>
+    <rect x="460" y="120" width="46" height="210" rx="6" fill="#6fbf73"/>
+
+    <!-- trend line -->
+    <path d="M150 280 220 250 285 255 350 205 415 180 483 140" fill="none" stroke="#2f7a3a" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="483" cy="140" r="6" fill="#2f7a3a"/>
+
+    <!-- leaf badge -->
+    <circle cx="540" cy="330" r="46" fill="#b8e8ba"/>
+    <path d="M520 340c14-4 24-2 34-16 4 12 2 22-8 30s-22 4-26-14z" fill="#2f7a3a"/>
+  </g>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Sporting facilities">
+  <rect width="400" height="240" fill="#eef6ef"/>
+  <path d="M40 60h320v150H40z" fill="#8ccf92"/>
+  <path d="M40 60h320v150H40z" fill="none" stroke="#f4f7f4" stroke-width="4"/>
+  <path d="M200 60v150M40 135h320" stroke="#f4f7f4" stroke-width="4"/>
+  <circle cx="200" cy="135" r="30" fill="none" stroke="#f4f7f4" stroke-width="4"/>
+  <circle cx="200" cy="135" r="10" fill="#222"/>
+  <path d="M200 125l9 7-3 11h-12l-3-11z" fill="#fff"/>
+  <g fill="#2f7a3a"><circle cx="70" cy="40" r="14"/><circle cx="330" cy="40" r="14"/></g>
+</svg>

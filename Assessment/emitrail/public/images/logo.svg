@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Emitrail logo">
+  <circle cx="32" cy="32" r="32" fill="#b8e8ba"/>
+  <path d="M20 44c0-11 8-20 24-22-2 14-11 22-24 22z" fill="#2f7a3a"/>
+  <path d="M20 44c3-8 9-13 18-16" fill="none" stroke="#b8e8ba" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="19" cy="21" r="3.4" fill="#2f7a3a"/>
+  <circle cx="44" cy="19" r="3.4" fill="#2f7a3a"/>
+  <path d="M20.5 22.5c4 6 8 4 12 4s7 3 10-5" fill="none" stroke="#2f7a3a" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="0.1 5"/>
+</svg>
