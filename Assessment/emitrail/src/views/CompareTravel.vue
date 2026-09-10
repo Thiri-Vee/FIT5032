@@ -1,5 +1,6 @@
 <script setup>
 import { getCurrentUser } from '../auth/auth.js'
+
 // Vue functions used for form data, calculated results and page loading
 import { computed, onMounted, reactive, ref } from 'vue'
 
@@ -8,6 +9,10 @@ import { travelModes } from '../data/travelModes'
 
 // Functions used to save and calculate ratings
 import { getAverageRating, getRatings, saveRating } from '../data/ratings.js'
+
+// Security functions used to check and clean user input
+import { containsUnsafeContent, sanitizeText } from '../security/security.js'
+
 // Store values entered in the travel form
 const form = reactive({
   startLocation: '',
@@ -21,7 +26,10 @@ const errors = reactive({
   destination: '',
   distance: '',
 })
+
+// Get the current logged-in user
 const currentUser = getCurrentUser()
+
 const formSubmitted = ref(false)
 
 // Rating values for the travel comparison
@@ -47,6 +55,7 @@ const submitRating = () => {
     return
   }
 
+  // User must be logged in before submitting a rating
   if (!currentUser) {
     ratingMessage.value = 'Please log in before submitting a rating.'
     return
@@ -105,6 +114,9 @@ const validateForm = () => {
   if (!form.startLocation.trim()) {
     errors.startLocation = 'Start location is required.'
     isValid = false
+  } else if (containsUnsafeContent(form.startLocation)) {
+    errors.startLocation = 'Start location contains invalid content.'
+    isValid = false
   } else if (!locationPattern.test(form.startLocation)) {
     errors.startLocation = 'Please enter a valid start location.'
     isValid = false
@@ -113,6 +125,9 @@ const validateForm = () => {
   // Check that a valid destination has been entered
   if (!form.destination.trim()) {
     errors.destination = 'Destination is required.'
+    isValid = false
+  } else if (containsUnsafeContent(form.destination)) {
+    errors.destination = 'Destination contains invalid content.'
     isValid = false
   } else if (!locationPattern.test(form.destination)) {
     errors.destination = 'Please enter a valid destination.'
@@ -140,10 +155,14 @@ const compareTravel = () => {
 
   formSubmitted.value = true
 
+  // Clean text input before saving it
+  const safeStartLocation = sanitizeText(form.startLocation)
+  const safeDestination = sanitizeText(form.destination)
+
   // Save the latest valid comparison for future sessions
   const comparison = {
-    startLocation: form.startLocation,
-    destination: form.destination,
+    startLocation: safeStartLocation,
+    destination: safeDestination,
     distance: Number(form.distance),
     date: new Date().toISOString(),
   }
@@ -208,6 +227,7 @@ const compareTravel = () => {
               step="0.1"
               class="form-control"
               :class="{ 'is-invalid': errors.distance }"
+              @input="clearError('distance')"
             />
 
             <div class="invalid-feedback">
@@ -219,7 +239,7 @@ const compareTravel = () => {
         </form>
       </div>
 
-      <!-- Result area will be developed for B.2 -->
+      <!-- Result area -->
       <div class="col-12 col-lg-8">
         <section class="results-section p-4">
           <h2 class="fw-bold mb-4">Results</h2>
@@ -247,6 +267,7 @@ const compareTravel = () => {
             </div>
           </div>
         </section>
+
         <!-- Travel comparison rating -->
         <section class="mt-5">
           <div class="card p-4 shadow-sm">
@@ -299,15 +320,16 @@ const compareTravel = () => {
 .form-control {
   min-height: 48px;
 }
+
 /* Result card generated for each travel mode */
 .travel-card {
   background-color: #b8e8ba;
   min-height: 330px;
-
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
+
 .travel-card h3 {
   min-height: 60px;
   display: flex;
@@ -315,9 +337,11 @@ const compareTravel = () => {
   justify-content: center;
   text-align: center;
 }
+
 .travel-card .card-details {
   min-height: 120px;
 }
+
 /* Adjust result cards for mobile screens */
 @media (max-width: 767.98px) {
   .results-section {
