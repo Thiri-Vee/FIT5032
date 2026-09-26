@@ -48,6 +48,10 @@ const logout = () => {
             Firebase Login
           </router-link>
         </li>
+        <!--Modify header info for add book-->
+        <li class="nav-link">
+          <router-link to="/addbook" class="nav-link" active-class="active">Add Book</router-link>
+        </li>
       </ul>
     </header>
   </div>
