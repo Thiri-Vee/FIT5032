@@ -4,11 +4,9 @@ import { isAuthenticated, logoutUser } from '../auth'
 
 const router = useRouter()
 
-// Logout
+// Logout for the previous Week 5 login
 const logout = () => {
   logoutUser()
-
-  // Redirect to login page
   router.push('/login')
 }
 </script>
@@ -27,14 +25,28 @@ const logout = () => {
           <router-link to="/about" class="nav-link" active-class="active"> About </router-link>
         </li>
 
-        <!-- Login shown when user is NOT logged in -->
+        <!-- Previous Week 5 Login -->
         <li v-if="!isAuthenticated" class="nav-item">
           <router-link to="/login" class="nav-link" active-class="active"> Login </router-link>
         </li>
 
-        <!-- Logout shown when user IS logged in -->
+        <!-- Previous Week 5 Logout -->
         <li v-else class="nav-item">
           <button type="button" class="nav-link" @click="logout">Logout</button>
+        </li>
+
+        <!-- Firebase Register -->
+        <li class="nav-item">
+          <router-link to="/FireRegister" class="nav-link" active-class="active">
+            Firebase Register
+          </router-link>
+        </li>
+
+        <!-- Firebase Login -->
+        <li class="nav-item">
+          <router-link to="/FireLogin" class="nav-link" active-class="active">
+            Firebase Login
+          </router-link>
         </li>
       </ul>
     </header>
