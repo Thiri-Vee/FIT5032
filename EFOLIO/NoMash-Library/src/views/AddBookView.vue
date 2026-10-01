@@ -20,8 +20,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import db from '../firebase/init.js'
-import { collection, addDoc } from 'firebase/firestore'
+import axios from 'axios'
 
 const isbn = ref('')
 const name = ref('')
@@ -35,17 +34,24 @@ const addBook = async () => {
       return
     }
 
-    await addDoc(collection(db, 'books'), {
-      isbn: isbnNumber,
-      name: name.value
-    })
+    // Send the book to the Firebase Function
+    const response = await axios.post(
+      'https://us-central1-fit5032-ba823.cloudfunctions.net/addCapitalizedBook',
+      {
+        isbn: isbnNumber,
+        name: name.value
+      }
+    )
+
+    console.log('Function response:', response.data)
 
     isbn.value = ''
     name.value = ''
 
-    alert('Book added successfully!')
+    alert('Book added and capitalized successfully!')
   } catch (error) {
-    console.error('Error adding book: ', error)
+    console.error('Error adding book:', error)
+    alert('Error adding book.')
   }
 }
 </script>

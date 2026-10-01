@@ -1,1 +1,24 @@
 ﻿node_modules/
+# Local AI/agent tooling
+.agents/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local environment files
+.env
+.env.local
+
+# Firebase local files
+.firebase/
+
+# Firebase / AI agent tooling
+.agents/
+**/skills-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
