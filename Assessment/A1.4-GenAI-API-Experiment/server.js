@@ -21,18 +21,30 @@ let books = [
   }
 ];
 
-// Basic validation
+// Refine the new validation as per genAi response
 function validateBook(book) {
-  if (!book.title || !book.author || !book.isbn) {
-    return 'Title, author and ISBN are required.';
+  if (!book || typeof book !== 'object') {
+    return 'A valid book object is required.';
   }
 
+  const { title, author, isbn } = book;
+
   if (
-    typeof book.title !== 'string' ||
-    typeof book.author !== 'string' ||
-    typeof book.isbn !== 'string'
+    typeof title !== 'string' ||
+    typeof author !== 'string' ||
+    typeof isbn !== 'string'
   ) {
     return 'Title, author and ISBN must be strings.';
+  }
+
+  if (!title.trim() || !author.trim() || !isbn.trim()) {
+    return 'Title, author and ISBN cannot be empty or whitespace only.';
+  }
+
+  const isbnPattern = /^(?:\d{10}|\d{13})$/;
+
+  if (!isbnPattern.test(isbn.trim())) {
+    return 'ISBN must contain exactly 10 or 13 digits.';
   }
 
   return null;
