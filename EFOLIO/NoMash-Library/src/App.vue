@@ -1,19 +1,23 @@
-<script setup>
-import BHeader from './components/BHeader.vue'
-</script>
-
 <template>
-  <header>
-    <BHeader />
-  </header>
+  <div class="main-container">
+    <header v-if="showHeader">
+      <BHeader />
+    </header>
 
-  <main>
-    <router-view></router-view>
-  </main>
+    <main class="main-box">
+      <router-view></router-view>
+    </main>
+  </div>
 </template>
 
-<style>
-.container {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-</style>
+<script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import BHeader from './components/BHeader.vue'
+
+const route = useRoute()
+
+const showHeader = computed(() => {
+  return route.name !== 'CountBookAPI'
+})
+</script>

@@ -20,12 +20,12 @@ const logout = () => {
           <router-link to="/" class="nav-link" active-class="active"> Home (Week 5) </router-link>
         </li>
 
-        <!-- About -->
+        <!-- About --
         <li class="nav-item">
           <router-link to="/about" class="nav-link" active-class="active"> About </router-link>
-        </li>
+        </li>>
 
-        <!-- Previous Week 5 Login -->
+        <! Previous Week 5 Login -->
         <li v-if="!isAuthenticated" class="nav-item">
           <router-link to="/login" class="nav-link" active-class="active"> Login </router-link>
         </li>
@@ -66,7 +66,10 @@ const logout = () => {
           <router-link to="/CountBookAPI" class="nav-link" acitve-class="active"
             >Count Book API</router-link>
         </li>
-
+        <li class="nav-item">
+          <router-link to="/GetAllBookAPI" class="nav-link" acitve-class="active"
+            >GetAllBookAPI</router-link>
+        </li>
       </ul>
     </header>
   </div>
