@@ -1,7 +1,7 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import {createUserWithEmailAndPassword,updateProfile,sendEmailVerification,} from 'firebase/auth'
 import { auth } from '../firebase/init.js'
 
 // Existing BR C security functions
@@ -94,8 +94,9 @@ const handleRegister = async () => {
     await updateProfile(userCredential.user, {
       displayName: safeName,
     })
+    await sendEmailVerification(userCredential.user)
 
-    message.value = 'Account created successfully using Firebase!'
+    message.value = 'Account created successfully! Please check your inbox to verify your email address.'
 
     form.name = ''
     form.email = ''

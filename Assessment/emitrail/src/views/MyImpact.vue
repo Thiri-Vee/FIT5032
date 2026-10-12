@@ -1,9 +1,10 @@
-<script setup>
-// My Impact dashboard. Layout and static content only.
-import AppIcon from '../components/AppIcon.vue'
-import { getCurrentUser } from '../auth/auth.js'
 
-const currentUser = getCurrentUser()
+<script setup>
+import { ref } from 'vue'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import AppIcon from '../components/AppIcon.vue'
+import { currentUser } from '../auth/auth.js'
+import { auth } from '../firebase/init.js'
 
 // Headline metrics for the Climate Impact Dashboard
 const stats = [
@@ -31,6 +32,58 @@ const sections = [
     text: 'Download your personal travel history as a CSV file for further analysis or your own records.',
   },
 ]
+
+// BR D.2 - Email with PDF Attachment
+const isSending = ref(false)
+const emailMessage = ref('')
+const emailError = ref(false)
+
+// Send the climate impact report using Firebase Cloud Functions
+const sendReport = async () => {
+  if (isSending.value) return
+
+  emailMessage.value = ''
+  emailError.value = false
+
+  if (!auth.currentUser) {
+    emailMessage.value = 'Please log in to email your report.'
+    emailError.value = true
+    return
+  }
+
+  isSending.value = true
+
+  try {
+    // Refresh Firebase authentication token
+    await auth.currentUser.getIdToken(true)
+
+    // Connect to the deployed Firebase Cloud Function
+    const functions = getFunctions(undefined, 'us-central1')
+    const sendImpactReport = httpsCallable(functions, 'sendImpactReport')
+
+    // Request the PDF email
+    const result = await sendImpactReport()
+
+    emailMessage.value =
+      result.data.message || 'Your report email has been requested successfully.'
+  } catch (error) {
+    console.error('Email report error:', error.code, error.message)
+    emailError.value = true
+
+    if (error.code === 'functions/failed-precondition') {
+      emailMessage.value =
+        'Please verify your email address before requesting a report.'
+    } else if (error.code === 'functions/unauthenticated') {
+      emailMessage.value = 'Please log in again.'
+    } else if (error.code === 'functions/resource-exhausted') {
+      emailMessage.value = 'Too many requests. Please try again later.'
+    } else {
+      emailMessage.value = 'Unable to send your report. Please try again.'
+    }
+  } finally {
+    isSending.value = false
+  }
+}
 </script>
 
 <template>
@@ -117,6 +170,72 @@ const sections = [
               </span>
               <h3 class="h5 fw-bold">{{ section.title }}</h3>
               <p class="text-muted mb-0">{{ section.text }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BR D.2 - Email with PDF Attachment -->
+    <section class="container py-5 border-top">
+      <div class="row justify-content-center">
+        <div class="col-12 col-md-9 col-lg-7">
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-md-5">
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <span class="icon-tile">
+                  <AppIcon name="download" />
+                </span>
+                <div>
+                  <h2 class="h4 fw-bold mb-0">
+                    Email My Climate Impact Report
+                  </h2>
+                </div>
+              </div>
+
+              <p class="text-muted mb-4">
+                Receive your current Emitrail climate impact summary
+                as a PDF attachment directly in your email inbox.
+              </p>
+
+              <template v-if="currentUser">
+                <p class="small mb-3">
+                  Report will be sent to:
+                  <strong>{{ currentUser.email }}</strong>
+                </p>
+
+                <button
+                  type="button"
+                  class="btn btn-brand"
+                  :disabled="isSending"
+                  @click="sendReport"
+                >
+                  {{ isSending ? 'Sending report...' : 'Email My Report' }}
+                </button>
+              </template>
+
+              <RouterLink
+                v-else
+                to="/login"
+                class="btn btn-brand"
+              >
+                Log in to Email Report
+              </RouterLink>
+
+              <!-- Success or error message -->
+              <div
+                v-if="emailMessage"
+                class="alert mt-3 mb-0"
+                :class="emailError ? 'alert-danger' : 'alert-success'"
+                role="status"
+              >
+                {{ emailMessage }}
+              </div>
+
+              <p class="small text-muted mt-3 mb-0">
+                The PDF contains the current dashboard summary.
+                Journey tracking is not yet connected to saved travel records.
+              </p>
             </div>
           </div>
         </div>
