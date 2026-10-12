@@ -1,8 +1,12 @@
+
 <script setup>
 import { reactive, ref } from 'vue'
-import { registerUser } from '../auth/auth.js'
-//calling security info
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { auth } from '../firebase/init.js'
+
+// Existing BR C security functions
 import { containsUnsafeContent, sanitizeText } from '../security/security.js'
+
 const form = reactive({
   name: '',
   email: '',
@@ -18,8 +22,9 @@ const errors = reactive({
 })
 
 const message = ref('')
+const isSubmitting = ref(false)
 
-// Validate the registration form
+// Keep existing BR B and C validation
 const validateForm = () => {
   let isValid = true
 
@@ -29,7 +34,6 @@ const validateForm = () => {
   errors.confirmPassword = ''
   message.value = ''
 
-  //updated validation requirement
   if (!form.name.trim()) {
     errors.name = 'Name is required.'
     isValid = false
@@ -37,7 +41,7 @@ const validateForm = () => {
     errors.name = 'Name contains invalid content.'
     isValid = false
   }
-  //updated email validation for unsafe content and missing @ characters
+
   if (!form.email.trim()) {
     errors.email = 'Email is required.'
     isValid = false
@@ -68,28 +72,54 @@ const validateForm = () => {
   return isValid
 }
 
-// Register the new user
-const handleRegister = () => {
-  if (!validateForm()) {
+// BR D.1 - Register with Firebase Authentication
+const handleRegister = async () => {
+  if (!validateForm() || isSubmitting.value) {
     return
   }
 
+  isSubmitting.value = true
+
   const safeName = sanitizeText(form.name)
-  const safeEmail = sanitizeText(form.email)
+  const safeEmail = sanitizeText(form.email).trim()
 
-  const result = registerUser(safeName, safeEmail, form.password)
-  //const result = registerUser(form.name.trim(), form.email.trim(), form.password)
+  try {
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      safeEmail,
+      form.password
+    )
 
-  message.value = result.message
+    // Store the user's display name in Firebase Auth
+    await updateProfile(userCredential.user, {
+      displayName: safeName,
+    })
 
-  if (result.success) {
+    message.value = 'Account created successfully using Firebase!'
+
     form.name = ''
     form.email = ''
     form.password = ''
     form.confirmPassword = ''
+
+  } catch (error) {
+    console.error('Firebase registration error:', error.code)
+
+    if (error.code === 'auth/email-already-in-use') {
+      message.value = 'An account with this email already exists.'
+    } else if (error.code === 'auth/invalid-email') {
+      message.value = 'Please enter a valid email address.'
+    } else if (error.code === 'auth/weak-password') {
+      message.value = 'Please choose a stronger password.'
+    } else {
+      message.value = 'Registration failed. Please try again.'
+    }
+  } finally {
+    isSubmitting.value = false
   }
 }
 </script>
+
 
 <template>
   <div class="container py-5 register-page">

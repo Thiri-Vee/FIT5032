@@ -10,7 +10,7 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Admin from '../views/Admin.vue'
 
-import { getCurrentUser } from '../auth/auth.js'
+import { getCurrentUser, authReadyPromise } from '../auth/auth.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -73,23 +73,27 @@ const router = createRouter({
 })
 
 // Check access before opening a page
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  // Wait until Firebase has restored the authentication session
+  await authReadyPromise
+
   const currentUser = getCurrentUser()
 
-  // Prevent logged-in users from opening Login or Register
+  // Redirect authenticated users away from Login and Register
   if (currentUser && (to.path === '/login' || to.path === '/register')) {
     return '/'
   }
 
-  // Block pages that require login
+  // Block pages that require authentication
   if (to.meta.requiresAuth && !currentUser) {
     return '/login'
   }
 
-  // Block users who do not have the required role
+  // Block access when the required role is missing
   if (to.meta.role && currentUser?.role !== to.meta.role) {
     return '/'
   }
 })
+
 
 export default router

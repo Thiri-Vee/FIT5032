@@ -3,7 +3,7 @@ import { getCurrentUser } from '../auth/auth.js'
 import AppIcon from '../components/AppIcon.vue'
 
 // Get the current logged-in user
-const currentUser = getCurrentUser()
+import { currentUser } from '../auth/auth.js'
 
 // Areas the admin dashboard will manage
 const adminAreas = [

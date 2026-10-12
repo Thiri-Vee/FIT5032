@@ -1,93 +1,44 @@
-// Get all registered users from localStorage
-// Get registered users and create a default admin account
-export const getUsers = () => {
-  const storedUsers = localStorage.getItem('emitrailUsers')
-  const users = storedUsers ? JSON.parse(storedUsers) : []
 
-  const adminExists = users.some((user) => user.email === 'admin@emitrail.com')
+import { ref } from 'vue'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { auth } from '../firebase/init.js'
 
-  // Add a default admin account if it does not exist
-  if (!adminExists) {
-    users.push({
-      id: 'admin-1',
-      name: 'Emitrail Admin',
-      email: 'admin@emitrail.com',
-      password: 'admin123',
-      role: 'admin',
-    })
+// Shared Firebase authentication state
+export const currentUser = ref(null)
+export const authReady = ref(false)
 
-    localStorage.setItem('emitrailUsers', JSON.stringify(users))
-  }
+// Listen for Firebase login, logout, and session restoration
+export const authReadyPromise = new Promise((resolve) => {
+  onAuthStateChanged(
+    auth,
+    (firebaseUser) => {
+      if (firebaseUser) {
+        currentUser.value = {
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email,
+          email: firebaseUser.email,
+          role: 'user',
+        }
+      } else {
+        currentUser.value = null
+      }
 
-  return users
-}
-
-// Save all users into localStorage
-export const saveUsers = (users) => {
-  localStorage.setItem('emitrailUsers', JSON.stringify(users))
-}
-
-// Register a new user
-export const registerUser = (name, email, password) => {
-  const users = getUsers()
-
-  const existingUser = users.find((user) => user.email.toLowerCase() === email.toLowerCase())
-
-  if (existingUser) {
-    return {
-      success: false,
-      message: 'An account with this email already exists.',
+      authReady.value = true
+      resolve()
+    },
+    (error) => {
+      console.error('Firebase authentication state error:', error)
+      currentUser.value = null
+      authReady.value = true
+      resolve()
     }
-  }
-
-  const newUser = {
-    id: Date.now(),
-    name,
-    email,
-    password,
-    role: 'user',
-  }
-
-  users.push(newUser)
-  saveUsers(users)
-
-  return {
-    success: true,
-    message: 'Account created successfully.',
-  }
-}
-
-// Login an existing user
-export const loginUser = (email, password) => {
-  const users = getUsers()
-
-  const user = users.find(
-    (user) => user.email.toLowerCase() === email.toLowerCase() && user.password === password,
   )
+})
 
-  if (!user) {
-    return {
-      success: false,
-      message: 'Invalid email or password.',
-    }
-  }
+// Get the currently authenticated user
+export const getCurrentUser = () => currentUser.value
 
-  localStorage.setItem('emitrailCurrentUser', JSON.stringify(user))
-
-  return {
-    success: true,
-    user,
-  }
-}
-
-// Get the currently logged-in user
-export const getCurrentUser = () => {
-  const user = localStorage.getItem('emitrailCurrentUser')
-
-  return user ? JSON.parse(user) : null
-}
-
-// Logout the current user
-export const logoutUser = () => {
-  localStorage.removeItem('emitrailCurrentUser')
+// Sign out through Firebase
+export const logoutUser = async () => {
+  await signOut(auth)
 }

@@ -1,20 +1,21 @@
 <script setup>
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser, logoutUser } from '../auth/auth.js'
+import { currentUser, logoutUser } from '../auth/auth.js'
 
 const router = useRouter()
 
-// Store the currently logged-in user
-const currentUser = ref(getCurrentUser())
-
-// Log the current user out
-const handleLogout = () => {
-  logoutUser()
-  currentUser.value = null
-  router.push('/login')
+// BR D.1 - Firebase logout
+const handleLogout = async () => {
+  try {
+    await logoutUser()
+    await router.push('/login')
+  } catch (error) {
+    console.error('Firebase logout error:', error)
+    alert('Unable to log out. Please try again.')
+  }
 }
 </script>
+
 
 <template>
   <!-- Responsive navigation bar using Bootstrap -->

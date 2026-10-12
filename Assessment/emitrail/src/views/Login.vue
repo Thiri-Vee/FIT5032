@@ -1,7 +1,9 @@
+
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { loginUser } from '../auth/auth.js'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '../firebase/init.js'
 
 const router = useRouter()
 
@@ -18,6 +20,7 @@ const errors = reactive({
 })
 
 const message = ref('')
+const isSubmitting = ref(false)
 
 // Validate the login form
 const validateForm = () => {
@@ -40,24 +43,46 @@ const validateForm = () => {
   return isValid
 }
 
-// Check the user account and log the user in
-const handleLogin = () => {
-  if (!validateForm()) {
+// BR D.1 - Login using Firebase Authentication
+const handleLogin = async () => {
+  if (!validateForm() || isSubmitting.value) {
     return
   }
 
-  const result = loginUser(form.email.trim(), form.password)
+  isSubmitting.value = true
 
-  if (!result.success) {
-    message.value = 'Invalid email or password.'
-    return
+  try {
+    await signInWithEmailAndPassword(
+      auth,
+      form.email.trim(),
+      form.password
+    )
+
+    message.value = ''
+    await router.push('/')
+
+  } catch (error) {
+    console.error('Firebase login error:', error.code)
+
+    if (
+      error.code === 'auth/invalid-credential' ||
+      error.code === 'auth/wrong-password' ||
+      error.code === 'auth/user-not-found'
+    ) {
+      message.value = 'Invalid email or password.'
+    } else if (error.code === 'auth/invalid-email') {
+      message.value = 'Please enter a valid email address.'
+    } else if (error.code === 'auth/too-many-requests') {
+      message.value = 'Too many login attempts. Please try again later.'
+    } else {
+      message.value = 'Login failed. Please try again.'
+    }
+  } finally {
+    isSubmitting.value = false
   }
-
-  // Reload the app so the navbar updates immediately
-  router.push('/')
-  window.location.reload()
 }
 </script>
+
 
 <template>
   <div class="container py-5 login-page">
