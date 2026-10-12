@@ -15,6 +15,7 @@ export const authReadyPromise = new Promise((resolve) => {
       if (firebaseUser) {
         currentUser.value = {
           id: firebaseUser.uid,
+          uid: firebaseUser.uid,
           name: firebaseUser.displayName || firebaseUser.email,
           email: firebaseUser.email,
           role: 'user',

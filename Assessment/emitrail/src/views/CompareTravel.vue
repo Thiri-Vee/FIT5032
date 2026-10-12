@@ -1,55 +1,41 @@
 <script setup>
-import { getCurrentUser } from '../auth/auth.js'
-
-// Presentational icon component
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { addDoc, collection, Timestamp } from 'firebase/firestore'
+import { auth, db } from '../firebase/init.js'
+import { currentUser } from '../auth/auth.js'
 import AppIcon from '../components/AppIcon.vue'
-
-// Vue functions used for form data, calculated results and page loading
-import { computed, onMounted, reactive, ref } from 'vue'
-
-// Travel mode mock data
 import { travelModes } from '../data/travelModes'
-
-// Functions used to save and calculate ratings
 import { getAverageRating, getRatings, saveRating } from '../data/ratings.js'
-
-// Security functions used to check and clean user input
 import { containsUnsafeContent, sanitizeText } from '../security/security.js'
 
-// Store values entered in the travel form
+// Existing comparison form
 const form = reactive({
   startLocation: '',
   destination: '',
   distance: '',
 })
 
-// Store validation messages for each input
 const errors = reactive({
   startLocation: '',
   destination: '',
   distance: '',
 })
 
-// Get the current logged-in user
-const currentUser = getCurrentUser()
-
 const formSubmitted = ref(false)
+const savedModes = ref([])
 
-// Rating values for the travel comparison
+// Existing rating feature
 const selectedRating = ref(0)
 const averageRating = ref(0)
 const ratingCount = ref(0)
 const ratingMessage = ref('')
 
-// Update the average rating and total number of ratings
 const loadRatingSummary = () => {
   const ratings = getRatings()
-
   averageRating.value = getAverageRating()
   ratingCount.value = ratings.length
 }
 
-// Save the user's rating
 const submitRating = () => {
   ratingMessage.value = ''
 
@@ -58,42 +44,35 @@ const submitRating = () => {
     return
   }
 
-  // User must be logged in before submitting a rating
-  if (!currentUser) {
+  if (!auth.currentUser) {
     ratingMessage.value = 'Please log in before submitting a rating.'
     return
   }
 
   saveRating({
     id: Date.now(),
-    userId: currentUser.id,
+    userId: auth.currentUser.uid,
     score: selectedRating.value,
   })
 
   ratingMessage.value = 'Thank you for your rating.'
   selectedRating.value = 0
-
   loadRatingSummary()
 }
 
-// Load existing ratings when the page opens
-onMounted(() => {
-  loadRatingSummary()
-})
+onMounted(loadRatingSummary)
 
-// Location must contain at least one letter
+// Existing validation
 const locationPattern = /[A-Za-z]/
 
-// Clear the error message when the user updates a field
 const clearError = (field) => {
   errors[field] = ''
 }
 
-// Calculate CO2 emissions for each travel mode using the entered distance
 const comparisonResults = computed(() => {
   const distance = Number(form.distance)
 
-  if (!distance || distance <= 0) {
+  if (!Number.isFinite(distance) || distance <= 0) {
     return []
   }
 
@@ -103,17 +82,13 @@ const comparisonResults = computed(() => {
   }))
 })
 
-// Check the form before allowing the comparison
 const validateForm = () => {
   let isValid = true
 
-  // Clear old validation messages
   errors.startLocation = ''
   errors.destination = ''
   errors.distance = ''
 
-  // Required field validation
-  // Check that a start location has been entered
   if (!form.startLocation.trim()) {
     errors.startLocation = 'Start location is required.'
     isValid = false
@@ -125,7 +100,6 @@ const validateForm = () => {
     isValid = false
   }
 
-  // Check that a valid destination has been entered
   if (!form.destination.trim()) {
     errors.destination = 'Destination is required.'
     isValid = false
@@ -137,11 +111,12 @@ const validateForm = () => {
     isValid = false
   }
 
-  // Numeric validation for distance
+  const distance = Number(form.distance)
+
   if (form.distance === '') {
     errors.distance = 'Distance is required.'
     isValid = false
-  } else if (Number(form.distance) <= 0) {
+  } else if (!Number.isFinite(distance) || distance <= 0) {
     errors.distance = 'Distance must be greater than 0.'
     isValid = false
   }
@@ -149,7 +124,6 @@ const validateForm = () => {
   return isValid
 }
 
-// Run validation when the Compare button is clicked
 const compareTravel = () => {
   if (!validateForm()) {
     formSubmitted.value = false
@@ -157,20 +131,110 @@ const compareTravel = () => {
   }
 
   formSubmitted.value = true
+  savedModes.value = []
+  saveMessage.value = ''
+  saveError.value = false
 
-  // Clean text input before saving it
-  const safeStartLocation = sanitizeText(form.startLocation)
-  const safeDestination = sanitizeText(form.destination)
-
-  // Save the latest valid comparison for future sessions
   const comparison = {
-    startLocation: safeStartLocation,
-    destination: safeDestination,
+    startLocation: sanitizeText(form.startLocation),
+    destination: sanitizeText(form.destination),
     distance: Number(form.distance),
     date: new Date().toISOString(),
   }
 
-  localStorage.setItem('emitrailLastComparison', JSON.stringify(comparison))
+  localStorage.setItem(
+    'emitrailLastComparison',
+    JSON.stringify(comparison),
+  )
+}
+
+// Hide outdated results when journey inputs change
+watch(form, () => {
+  savedModes.value = []
+  formSubmitted.value = false
+  saveMessage.value = ''
+  saveError.value = false
+})
+
+// BR D.3 - Save Journey to Cloud Firestore
+const isSaving = ref(false)
+const saveMessage = ref('')
+const saveError = ref(false)
+
+async function saveJourney(mode) {
+  if (isSaving.value || savedModes.value.includes(mode.name)) return
+
+  saveMessage.value = ''
+  saveError.value = false
+
+  const user = auth.currentUser
+
+  if (!user) {
+    saveMessage.value = 'Please log in to save your journey.'
+    saveError.value = true
+    return
+  }
+
+  if (!formSubmitted.value || !validateForm()) {
+    saveMessage.value = 'Please compare a valid journey first.'
+    saveError.value = true
+    return
+  }
+
+  // Only sustainable modes can be logged
+  if (mode.name === 'Car') {
+    saveMessage.value = 'Select a sustainable travel mode.'
+    saveError.value = true
+    return
+  }
+
+  const distanceKm = Number(form.distance)
+
+  const carMode = travelModes.find(
+    (item) => item.name === 'Car',
+  )
+
+  if (!carMode) {
+    saveMessage.value = 'Car emission data is unavailable.'
+    saveError.value = true
+    return
+  }
+
+  const carEmissions = distanceKm * carMode.emissionFactor
+  const selectedEmissions = distanceKm * mode.emissionFactor
+
+  const co2SavedKg = Number(
+    Math.max(0, carEmissions - selectedEmissions).toFixed(2),
+  )
+
+  isSaving.value = true
+
+  try {
+    await addDoc(collection(db, 'journeys'), {
+      userId: user.uid,
+      date: Timestamp.now(),
+      mode: mode.name,
+      distanceKm,
+      co2SavedKg,
+      startLocation: sanitizeText(form.startLocation),
+      destination: sanitizeText(form.destination),
+    })
+
+    saveMessage.value =
+      `${mode.name} journey saved successfully! ` +
+      `Estimated CO₂ saved: ${co2SavedKg.toFixed(2)} kg.`
+
+    savedModes.value = [...savedModes.value, mode.name]
+    saveError.value = false
+  } catch (error) {
+    console.error('Error saving journey:', error)
+
+    saveMessage.value =
+      'Unable to save your journey. Please try again.'
+    saveError.value = true
+  } finally {
+    isSaving.value = false
+  }
 }
 </script>
 
@@ -194,6 +258,7 @@ const compareTravel = () => {
 
     <div class="container py-5">
       <div class="row g-4 g-lg-5">
+
         <!-- Travel comparison form -->
         <div class="col-12 col-lg-4">
           <div class="card border-0 shadow-sm">
@@ -203,7 +268,9 @@ const compareTravel = () => {
               <form @submit.prevent="compareTravel" novalidate>
                 <!-- Start location -->
                 <div class="mb-4">
-                  <label for="startLocation" class="form-label fw-bold"> Start location </label>
+                  <label for="startLocation" class="form-label fw-bold">
+                    Start location
+                  </label>
 
                   <input
                     id="startLocation"
@@ -221,7 +288,9 @@ const compareTravel = () => {
 
                 <!-- Destination -->
                 <div class="mb-4">
-                  <label for="destination" class="form-label fw-bold"> Destination </label>
+                  <label for="destination" class="form-label fw-bold">
+                    Destination
+                  </label>
 
                   <input
                     id="destination"
@@ -239,7 +308,9 @@ const compareTravel = () => {
 
                 <!-- Travel distance -->
                 <div class="mb-4">
-                  <label for="distance" class="form-label fw-bold"> Distance (km) </label>
+                  <label for="distance" class="form-label fw-bold">
+                    Distance (km)
+                  </label>
 
                   <input
                     id="distance"
@@ -257,12 +328,18 @@ const compareTravel = () => {
                   </div>
                 </div>
 
-                <button type="submit" class="btn btn-dark px-4 w-100">Compare</button>
+                <button
+                  type="submit"
+                  class="btn btn-dark px-4 w-100"
+                >
+                  Compare
+                </button>
               </form>
 
               <p class="small text-muted mt-3 mb-0">
-                Distances stay on your device. Only the most recent valid comparison is saved
-                locally.
+                Your latest comparison is saved locally on this device.
+                If you choose to save a journey, its details will also
+                be stored securely in Cloud Firestore under your account.
               </p>
             </div>
           </div>
@@ -273,7 +350,7 @@ const compareTravel = () => {
           <section class="results-section p-4">
             <h2 class="fw-bold mb-4">Results</h2>
 
-            <!-- Empty state before a comparison is run -->
+            <!-- Empty state -->
             <div v-if="!formSubmitted" class="text-center py-4">
               <img
                 src="/images/compare-empty.svg"
@@ -281,55 +358,95 @@ const compareTravel = () => {
                 class="illustration mb-3"
                 style="max-width: 320px"
               />
+
               <p class="text-muted mb-0">
                 Enter your journey information to compare travel options.
               </p>
             </div>
 
-            <div v-else class="row g-3">
-              <!-- Display a result card for each travel mode -->
-              <div
-                v-for="mode in comparisonResults"
-                :key="mode.id"
-                class="col-12 col-md-6 col-xl-3"
-              >
-                <div class="travel-card h-100 p-4">
-                  <span class="mode-icon mb-2">
-                    <AppIcon
-                      :name="
-                        {
+            <!-- Comparison results -->
+            <div v-else>
+              <div class="row g-3">
+                <div
+                  v-for="mode in comparisonResults"
+                  :key="mode.id"
+                  class="col-12 col-md-6 col-xl-3"
+                >
+                  <div class="travel-card h-100 p-4">
+                    <span class="mode-icon mb-2">
+                      <AppIcon
+                        :name="{
                           Walking: 'walk',
                           Cycling: 'bike',
                           'Public Transport': 'bus',
                           Car: 'car',
-                        }[mode.name] || 'route'
-                      "
-                      :size="28"
-                    />
-                  </span>
+                        }[mode.name] || 'route'"
+                        :size="28"
+                      />
+                    </span>
 
-                  <h3 class="h5 text-center">
-                    {{ mode.name }}
-                  </h3>
+                    <h3 class="h5 text-center">
+                      {{ mode.name }}
+                    </h3>
 
-                  <div class="card-details">
-                    <strong> {{ mode.emissions }} kg CO₂ </strong>
+                    <div class="card-details">
+                      <strong>
+                        {{ mode.emissions }} kg CO₂
+                      </strong>
 
-                    <p class="small mb-0 mt-2">
-                      {{ mode.description }}
-                    </p>
+                      <p class="small mb-0 mt-2">
+                        {{ mode.description }}
+                      </p>
+
+                      <!-- BR D.3 - Save Journey -->
+                      <button
+                        v-if="mode.name !== 'Car'"
+                        type="button"
+                        class="btn btn-brand btn-sm w-100 mt-3"
+                        :disabled="isSaving || !currentUser || savedModes.includes(mode.name)"
+                        @click="saveJourney(mode)"
+                      >
+                        {{ savedModes.includes(mode.name) ? 'Journey Saved' : isSaving ? 'Saving...' : 'Save Journey' }}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <p
+                v-if="!currentUser"
+                class="small text-muted mt-3 mb-0"
+              >
+                Please log in to save a journey to your travel history.
+              </p>
+
+              <div
+                v-if="saveMessage"
+                class="alert mt-3 mb-0"
+                :class="saveError ? 'alert-danger' : 'alert-success'"
+                role="status"
+              >
+                {{ saveMessage }}
+              </div>
+
+              <RouterLink
+                v-if="saveMessage && !saveError"
+                to="/impact"
+                class="btn btn-brand mt-3"
+              >
+                View My Travel History
+              </RouterLink>
             </div>
           </section>
 
-          <!-- Travel comparison rating -->
+          <!-- Existing travel comparison rating -->
           <section class="mt-5">
             <div class="card p-4 shadow-sm">
               <h2 class="h4 mb-3">Rate the Travel Comparison</h2>
 
-              <p class="mb-2">How useful was this travel comparison?</p>
+              <p class="mb-2">
+                How useful was this travel comparison?
+              </p>
 
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <button
@@ -337,7 +454,11 @@ const compareTravel = () => {
                   :key="score"
                   type="button"
                   class="btn d-inline-flex align-items-center gap-1"
-                  :class="selectedRating === score ? 'btn-success' : 'btn-outline-success'"
+                  :class="
+                    selectedRating === score
+                      ? 'btn-success'
+                      : 'btn-outline-success'
+                  "
                   @click="selectedRating = score"
                 >
                   <AppIcon name="star" :size="16" />
@@ -345,7 +466,11 @@ const compareTravel = () => {
                 </button>
               </div>
 
-              <button type="button" class="btn btn-success" @click="submitRating">
+              <button
+                type="button"
+                class="btn btn-success"
+                @click="submitRating"
+              >
                 Submit Rating
               </button>
 
@@ -360,7 +485,9 @@ const compareTravel = () => {
                 {{ averageRating }} / 5
               </p>
 
-              <p class="mb-0">Based on {{ ratingCount }} rating(s)</p>
+              <p class="mb-0">
+                Based on {{ ratingCount }} rating(s)
+              </p>
             </div>
           </section>
         </div>
@@ -386,18 +513,15 @@ const compareTravel = () => {
 .travel-card {
   background-color: #b8e8ba;
   min-height: 330px;
-
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-
   border-radius: 8px;
 }
 
 /* Keep travel mode headings aligned */
 .travel-card h3 {
   min-height: 60px;
-
   display: flex;
   align-items: center;
   justify-content: center;
@@ -412,7 +536,6 @@ const compareTravel = () => {
   border-radius: 50%;
   background-color: #ffffff;
   color: #1c1c1c;
-
   display: flex;
   align-items: center;
   justify-content: center;
@@ -436,31 +559,24 @@ const compareTravel = () => {
 
 /* Mobile screens */
 @media (max-width: 575.98px) {
-  /* Reduce page spacing on small screens */
   .container {
     padding-left: 16px;
     padding-right: 16px;
   }
 
-  /* Reduce results padding on mobile */
   .results-section {
     padding: 20px !important;
   }
 
-  /* Cards do not need to be tall on mobile */
   .travel-card {
     min-height: 160px;
   }
 
-  .travel-card h3 {
-    min-height: auto;
-  }
-
+  .travel-card h3,
   .travel-card .card-details {
     min-height: auto;
   }
 
-  /* Make form button easier to use on mobile */
   form .btn {
     width: 100%;
   }

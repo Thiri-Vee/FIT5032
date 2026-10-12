@@ -1,6 +1,10 @@
 <script setup>
-// Explore Places overview page. Static, informational content only.
+// Explore Places page with Firestore interactive table
+import { onMounted, ref } from 'vue'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '../firebase/init'
 import AppIcon from '../components/AppIcon.vue'
+import InteractiveTable from '../components/InteractiveTable.vue'
 
 // Location categories shown as browse cards
 const categories = [
@@ -33,6 +37,41 @@ const listingFeatures = [
   { icon: 'star', text: 'Community ratings out of 5' },
   { icon: 'users', text: 'Reviews from other members' },
 ]
+
+// BR D.3: Firestore places table
+const places = ref([])
+const loadingPlaces = ref(true)
+const placesError = ref('')
+
+const placeColumns = [
+  { key: 'name', label: 'Place Name' },
+  { key: 'category', label: 'Category' },
+  { key: 'suburb', label: 'Suburb' },
+  { key: 'distanceKm', label: 'Distance (km)' },
+  { key: 'rating', label: 'Rating' },
+]
+
+// Retrieve places from Cloud Firestore
+async function loadPlaces() {
+  loadingPlaces.value = true
+  placesError.value = ''
+
+  try {
+    const snapshot = await getDocs(collection(db, 'places'))
+
+    places.value = snapshot.docs.map((document) => ({
+      id: document.id,
+      ...document.data(),
+    }))
+  } catch (error) {
+    console.error('Error loading places:', error)
+    placesError.value = 'Unable to load places. Please try again.'
+  } finally {
+    loadingPlaces.value = false
+  }
+}
+
+onMounted(loadPlaces)
 </script>
 
 <template>
@@ -112,6 +151,51 @@ const listingFeatures = [
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- BR D.3: Interactive Firestore Places Table -->
+    <section class="section-soft border-top py-5">
+      <div class="container">
+        <div class="row mb-4">
+          <div class="col-12 col-lg-8">
+            <p class="eyebrow mb-2">Explore Melbourne</p>
+            <h2 class="fw-bold mb-3">Browse active travel locations</h2>
+            <p class="text-muted mb-0">
+              Discover walking trails, cycling routes, parks and sporting
+              facilities. Search, filter and sort locations to find
+              places that interest you.
+            </p>
+            <p class="small text-muted mt-2 mb-0">
+              Demonstration dataset: distances and ratings are illustrative,
+              not verified live measurements or community reviews.
+            </p>
+          </div>
+        </div>
+
+        <div v-if="loadingPlaces" class="text-center py-4">
+          <div class="spinner-border text-success" role="status">
+            <span class="visually-hidden">Loading places...</span>
+          </div>
+          <p class="text-muted mt-3">Loading places...</p>
+        </div>
+
+        <div v-else-if="placesError" class="alert alert-danger" role="alert">
+          {{ placesError }}
+          <button
+            type="button"
+            class="btn btn-outline-danger btn-sm ms-2"
+            @click="loadPlaces"
+          >
+            Retry
+          </button>
+        </div>
+
+        <InteractiveTable
+          v-else
+          :rows="places"
+          :columns="placeColumns"
+        />
       </div>
     </section>
   </div>
