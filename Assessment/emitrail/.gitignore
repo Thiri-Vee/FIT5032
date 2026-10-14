@@ -41,3 +41,6 @@ __screenshots__/
 .env 
 .env.local
 .env.*.local
+
+# Firebase Hosting cache
+.firebase/
