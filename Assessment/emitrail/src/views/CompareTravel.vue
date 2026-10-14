@@ -1,14 +1,22 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { addDoc, collection, Timestamp } from 'firebase/firestore'
+
 import { auth, db } from '../firebase/init.js'
 import { currentUser } from '../auth/auth.js'
+
 import AppIcon from '../components/AppIcon.vue'
+import LocationSearch from '../components/LocationSearch.vue'
+import RouteMap from '../components/RouteMap.vue'
+
 import { travelModes } from '../data/travelModes'
 import { getAverageRating, getRatings, saveRating } from '../data/ratings.js'
 import { containsUnsafeContent, sanitizeText } from '../security/security.js'
 
-// Existing comparison form
+// -----------------------------------------
+// Journey form
+// -----------------------------------------
+
 const form = reactive({
   startLocation: '',
   destination: '',
@@ -24,19 +32,360 @@ const errors = reactive({
 const formSubmitted = ref(false)
 const savedModes = ref([])
 
-// Existing rating feature
+// -----------------------------------------
+// Mapbox routes
+// -----------------------------------------
+
+const startCoordinates = ref(null)
+const destinationCoordinates = ref(null)
+const distanceManuallyEdited = ref(false)
+
+const routes = ref({
+  walking: null,
+  cycling: null,
+  driving: null,
+})
+
+const routeError = ref('')
+
+const routeReady = computed(() => Boolean(routes.value.driving))
+
+function clearError(field) {
+  errors[field] = ''
+}
+
+function locationChanged(field) {
+  clearError(field)
+  distanceManuallyEdited.value = false
+
+  if (field === 'startLocation') {
+    startCoordinates.value = null
+  }
+
+  if (field === 'destination') {
+    destinationCoordinates.value = null
+  }
+
+  routes.value = {
+    walking: null,
+    cycling: null,
+    driving: null,
+  }
+
+  form.distance = ''
+  routeError.value = ''
+  formSubmitted.value = false
+}
+
+function locationSelected(field, location) {
+  if (
+    !Array.isArray(location.coordinates) ||
+    location.coordinates.length < 2
+  ) {
+    return
+  }
+
+  if (field === 'startLocation') {
+    startCoordinates.value = [...location.coordinates]
+    clearError('startLocation')
+  }
+
+  if (field === 'destination') {
+    destinationCoordinates.value = [...location.coordinates]
+    clearError('destination')
+  }
+}
+
+function routesCalculated(result) {
+  routes.value = {
+    walking: result.walking ?? null,
+    cycling: result.cycling ?? null,
+    driving: result.driving ?? null,
+  }
+
+  if (!distanceManuallyEdited.value) {
+    form.distance = result.driving
+      ? String(result.driving.distanceKm)
+      : ''
+  }
+
+  routeError.value = result.driving
+    ? ''
+    : 'No driving route available. You can enter a distance manually after selecting valid locations.'
+
+  if (result.driving) {
+    clearError('distance')
+  }
+}
+
+function routeFailed(message) {
+  routes.value = {
+    walking: null,
+    cycling: null,
+    driving: null,
+  }
+
+  if (!distanceManuallyEdited.value) form.distance = ''
+  routeError.value = message
+}
+
+function distanceForMode(modeName) {
+  const enteredDistance = Number(form.distance)
+  if (!Number.isFinite(enteredDistance) || enteredDistance <= 0) return null
+
+  const drivingDistance = routes.value.driving?.distanceKm
+  if (!drivingDistance || drivingDistance <= 0) {
+    // Manual fallback: use the entered distance for each mode.
+    return enteredDistance
+  }
+
+  if (modeName === 'Car' || modeName === 'Public Transport') {
+    return enteredDistance
+  }
+
+  const route = modeName === 'Walking'
+    ? routes.value.walking
+    : modeName === 'Cycling'
+      ? routes.value.cycling
+      : null
+
+  if (!route) return null
+  return Number((enteredDistance * route.distanceKm / drivingDistance).toFixed(2))
+}
+function durationForMode(modeName) {
+  if (distanceManuallyEdited.value) return null
+  if (modeName === 'Walking') {
+    return routes.value.walking?.durationMinutes ?? null
+  }
+
+  if (modeName === 'Cycling') {
+    return routes.value.cycling?.durationMinutes ?? null
+  }
+
+  if (modeName === 'Car') {
+    return routes.value.driving?.durationMinutes ?? null
+  }
+
+  return null
+}
+
+// -----------------------------------------
+// CO₂ comparison results
+// -----------------------------------------
+
+const comparisonResults = computed(() => {
+  const distance = Number(form.distance)
+  if (!Number.isFinite(distance) || distance <= 0) return []
+
+  return travelModes.map((mode) => {
+    const distanceKm = distanceForMode(mode.name)
+    const durationMinutes = durationForMode(mode.name)
+
+    return {
+      ...mode,
+      distanceKm,
+      durationMinutes,
+      emissions:
+        distanceKm === null
+          ? null
+          : (distanceKm * mode.emissionFactor).toFixed(2),
+      isProxy: mode.name === 'Public Transport',
+    }
+  })
+})
+
+// -----------------------------------------
+// Validation
+// -----------------------------------------
+
+const locationPattern = /[A-Za-z]/
+
+function validateForm() {
+  let isValid = true
+
+  errors.startLocation = ''
+  errors.destination = ''
+  errors.distance = ''
+
+  if (!form.startLocation.trim()) {
+    errors.startLocation = 'Start location is required.'
+    isValid = false
+  } else if (containsUnsafeContent(form.startLocation)) {
+    errors.startLocation = 'Start location contains invalid content.'
+    isValid = false
+  } else if (!locationPattern.test(form.startLocation)) {
+    errors.startLocation = 'Please enter a valid start location.'
+    isValid = false
+  } else if (!startCoordinates.value) {
+    errors.startLocation = 'Please select a valid start location from the suggestions.'
+    isValid = false
+  }
+
+  if (!form.destination.trim()) {
+    errors.destination = 'Destination is required.'
+    isValid = false
+  } else if (containsUnsafeContent(form.destination)) {
+    errors.destination = 'Destination contains invalid content.'
+    isValid = false
+  } else if (!locationPattern.test(form.destination)) {
+    errors.destination = 'Please enter a valid destination.'
+    isValid = false
+  } else if (!destinationCoordinates.value) {
+    errors.destination = 'Please select a valid destination from the suggestions.'
+    isValid = false
+  }
+
+  const distance = Number(form.distance)
+
+  if (form.distance === '') {
+    errors.distance = 'Distance is required.'
+    isValid = false
+  } else if (!Number.isFinite(distance) || distance <= 0) {
+    errors.distance = 'Distance must be greater than 0.'
+    isValid = false
+  }
+
+  return isValid
+}
+
+// -----------------------------------------
+// Compare travel
+// -----------------------------------------
+
+function compareTravel() {
+  if (!validateForm()) {
+    formSubmitted.value = false
+    return
+  }
+
+  formSubmitted.value = true
+  savedModes.value = []
+  saveMessage.value = ''
+  saveError.value = false
+
+  localStorage.setItem(
+    'emitrailLastComparison',
+    JSON.stringify({
+      startLocation: sanitizeText(form.startLocation),
+      destination: sanitizeText(form.destination),
+      distance: Number(form.distance),
+      date: new Date().toISOString(),
+    }),
+  )
+}
+
+watch(form, () => {
+  formSubmitted.value = false
+  savedModes.value = []
+  saveMessage.value = ''
+  saveError.value = false
+})
+
+// -----------------------------------------
+// Save Journey to Firestore
+// -----------------------------------------
+
+const isSaving = ref(false)
+const saveMessage = ref('')
+const saveError = ref(false)
+
+async function saveJourney(mode) {
+  if (isSaving.value || savedModes.value.includes(mode.name)) {
+    return
+  }
+
+  saveMessage.value = ''
+  saveError.value = false
+
+  const user = auth.currentUser
+
+  if (!user) {
+    saveMessage.value = 'Please log in to save your journey.'
+    saveError.value = true
+    return
+  }
+
+  if (!formSubmitted.value || !validateForm()) {
+    saveMessage.value = 'Please compare a valid journey first.'
+    saveError.value = true
+    return
+  }
+
+  if (mode.name === 'Car') {
+    saveMessage.value = 'Select a sustainable travel mode.'
+    saveError.value = true
+    return
+  }
+
+  const distanceKm = distanceForMode(mode.name)
+
+  if (distanceKm === null || distanceKm <= 0) {
+    saveMessage.value = 'No route is available for this travel mode.'
+    saveError.value = true
+    return
+  }
+
+  const carMode = travelModes.find((item) => item.name === 'Car')
+
+  if (!carMode) {
+    saveMessage.value = 'Car emission data is unavailable.'
+    saveError.value = true
+    return
+  }
+
+  const drivingDistanceKm = Number(form.distance)
+  const carEmissions = drivingDistanceKm * carMode.emissionFactor
+  const selectedEmissions = distanceKm * mode.emissionFactor
+
+  const co2SavedKg = Number(
+    Math.max(0, carEmissions - selectedEmissions).toFixed(2),
+  )
+
+  isSaving.value = true
+
+  try {
+    await addDoc(collection(db, 'journeys'), {
+      userId: user.uid,
+      date: Timestamp.now(),
+      mode: mode.name,
+      distanceKm,
+      co2SavedKg,
+      startLocation: sanitizeText(form.startLocation),
+      destination: sanitizeText(form.destination),
+    })
+
+    savedModes.value = [...savedModes.value, mode.name]
+
+    saveMessage.value =
+      `${mode.name} journey saved successfully! ` +
+      `Estimated CO₂ saved: ${co2SavedKg.toFixed(2)} kg.`
+
+    saveError.value = false
+  } catch (error) {
+    console.error('Error saving journey:', error)
+    saveMessage.value = 'Unable to save your journey. Please try again.'
+    saveError.value = true
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// -----------------------------------------
+// Rating feature
+// -----------------------------------------
+
 const selectedRating = ref(0)
 const averageRating = ref(0)
 const ratingCount = ref(0)
 const ratingMessage = ref('')
 
-const loadRatingSummary = () => {
+function loadRatingSummary() {
   const ratings = getRatings()
   averageRating.value = getAverageRating()
   ratingCount.value = ratings.length
 }
 
-const submitRating = () => {
+function submitRating() {
   ratingMessage.value = ''
 
   if (selectedRating.value < 1 || selectedRating.value > 5) {
@@ -61,195 +410,26 @@ const submitRating = () => {
 }
 
 onMounted(loadRatingSummary)
-
-// Existing validation
-const locationPattern = /[A-Za-z]/
-
-const clearError = (field) => {
-  errors[field] = ''
-}
-
-const comparisonResults = computed(() => {
-  const distance = Number(form.distance)
-
-  if (!Number.isFinite(distance) || distance <= 0) {
-    return []
-  }
-
-  return travelModes.map((mode) => ({
-    ...mode,
-    emissions: (distance * mode.emissionFactor).toFixed(2),
-  }))
-})
-
-const validateForm = () => {
-  let isValid = true
-
-  errors.startLocation = ''
-  errors.destination = ''
-  errors.distance = ''
-
-  if (!form.startLocation.trim()) {
-    errors.startLocation = 'Start location is required.'
-    isValid = false
-  } else if (containsUnsafeContent(form.startLocation)) {
-    errors.startLocation = 'Start location contains invalid content.'
-    isValid = false
-  } else if (!locationPattern.test(form.startLocation)) {
-    errors.startLocation = 'Please enter a valid start location.'
-    isValid = false
-  }
-
-  if (!form.destination.trim()) {
-    errors.destination = 'Destination is required.'
-    isValid = false
-  } else if (containsUnsafeContent(form.destination)) {
-    errors.destination = 'Destination contains invalid content.'
-    isValid = false
-  } else if (!locationPattern.test(form.destination)) {
-    errors.destination = 'Please enter a valid destination.'
-    isValid = false
-  }
-
-  const distance = Number(form.distance)
-
-  if (form.distance === '') {
-    errors.distance = 'Distance is required.'
-    isValid = false
-  } else if (!Number.isFinite(distance) || distance <= 0) {
-    errors.distance = 'Distance must be greater than 0.'
-    isValid = false
-  }
-
-  return isValid
-}
-
-const compareTravel = () => {
-  if (!validateForm()) {
-    formSubmitted.value = false
-    return
-  }
-
-  formSubmitted.value = true
-  savedModes.value = []
-  saveMessage.value = ''
-  saveError.value = false
-
-  const comparison = {
-    startLocation: sanitizeText(form.startLocation),
-    destination: sanitizeText(form.destination),
-    distance: Number(form.distance),
-    date: new Date().toISOString(),
-  }
-
-  localStorage.setItem(
-    'emitrailLastComparison',
-    JSON.stringify(comparison),
-  )
-}
-
-// Hide outdated results when journey inputs change
-watch(form, () => {
-  savedModes.value = []
-  formSubmitted.value = false
-  saveMessage.value = ''
-  saveError.value = false
-})
-
-// BR D.3 - Save Journey to Cloud Firestore
-const isSaving = ref(false)
-const saveMessage = ref('')
-const saveError = ref(false)
-
-async function saveJourney(mode) {
-  if (isSaving.value || savedModes.value.includes(mode.name)) return
-
-  saveMessage.value = ''
-  saveError.value = false
-
-  const user = auth.currentUser
-
-  if (!user) {
-    saveMessage.value = 'Please log in to save your journey.'
-    saveError.value = true
-    return
-  }
-
-  if (!formSubmitted.value || !validateForm()) {
-    saveMessage.value = 'Please compare a valid journey first.'
-    saveError.value = true
-    return
-  }
-
-  // Only sustainable modes can be logged
-  if (mode.name === 'Car') {
-    saveMessage.value = 'Select a sustainable travel mode.'
-    saveError.value = true
-    return
-  }
-
-  const distanceKm = Number(form.distance)
-
-  const carMode = travelModes.find(
-    (item) => item.name === 'Car',
-  )
-
-  if (!carMode) {
-    saveMessage.value = 'Car emission data is unavailable.'
-    saveError.value = true
-    return
-  }
-
-  const carEmissions = distanceKm * carMode.emissionFactor
-  const selectedEmissions = distanceKm * mode.emissionFactor
-
-  const co2SavedKg = Number(
-    Math.max(0, carEmissions - selectedEmissions).toFixed(2),
-  )
-
-  isSaving.value = true
-
-  try {
-    await addDoc(collection(db, 'journeys'), {
-      userId: user.uid,
-      date: Timestamp.now(),
-      mode: mode.name,
-      distanceKm,
-      co2SavedKg,
-      startLocation: sanitizeText(form.startLocation),
-      destination: sanitizeText(form.destination),
-    })
-
-    saveMessage.value =
-      `${mode.name} journey saved successfully! ` +
-      `Estimated CO₂ saved: ${co2SavedKg.toFixed(2)} kg.`
-
-    savedModes.value = [...savedModes.value, mode.name]
-    saveError.value = false
-  } catch (error) {
-    console.error('Error saving journey:', error)
-
-    saveMessage.value =
-      'Unable to save your journey. Please try again.'
-    saveError.value = true
-  } finally {
-    isSaving.value = false
-  }
-}
 </script>
 
 <template>
   <div class="compare-page">
-    <!-- Page intro -->
+    <!-- Introduction -->
     <section class="section-soft border-bottom">
       <div class="container py-5">
         <div class="row justify-content-center text-center">
           <div class="col-12 col-lg-9">
             <p class="eyebrow mb-2">Active travel comparison</p>
-            <h1 class="fw-bold mb-3">Compare how you travel</h1>
+
+            <h1 class="fw-bold mb-3">
+              Compare how you travel
+            </h1>
+
             <p class="lead text-muted mb-0">
-              Enter a journey and compare walking, cycling, public transport and car travel by
-              distance and estimated emissions, using established published emission-factor data.
+              Enter a journey and compare walking, cycling,
+              public transport and car travel by distance and
+              estimated emissions, using established published
+              emission-factor data.
             </p>
           </div>
         </div>
@@ -257,58 +437,61 @@ async function saveJourney(mode) {
     </section>
 
     <div class="container py-5">
-      <div class="row g-4 g-lg-5">
-
-        <!-- Travel comparison form -->
+      <!-- TOP: Journey details + Map -->
+      <div class="row g-4 g-lg-5 align-items-start">
         <div class="col-12 col-lg-4">
           <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
-              <h2 class="h5 fw-bold mb-3">Journey details</h2>
+              <h2 class="h5 fw-bold mb-3">
+                Journey details
+              </h2>
 
               <form @submit.prevent="compareTravel" novalidate>
-                <!-- Start location -->
                 <div class="mb-4">
-                  <label for="startLocation" class="form-label fw-bold">
+                  <label class="form-label fw-bold">
                     Start location
                   </label>
 
-                  <input
-                    id="startLocation"
+                  <LocationSearch
                     v-model="form.startLocation"
-                    type="text"
-                    class="form-control"
-                    :class="{ 'is-invalid': errors.startLocation }"
-                    @input="clearError('startLocation')"
+                    placeholder="Search start location"
+                    @update:model-value="locationChanged('startLocation')"
+                    @select="locationSelected('startLocation', $event)"
                   />
 
-                  <div class="invalid-feedback">
+                  <div
+                    v-if="errors.startLocation"
+                    class="text-danger small mt-1"
+                  >
                     {{ errors.startLocation }}
                   </div>
                 </div>
 
-                <!-- Destination -->
                 <div class="mb-4">
-                  <label for="destination" class="form-label fw-bold">
+                  <label class="form-label fw-bold">
                     Destination
                   </label>
 
-                  <input
-                    id="destination"
+                  <LocationSearch
                     v-model="form.destination"
-                    type="text"
-                    class="form-control"
-                    :class="{ 'is-invalid': errors.destination }"
-                    @input="clearError('destination')"
+                    placeholder="Search destination"
+                    @update:model-value="locationChanged('destination')"
+                    @select="locationSelected('destination', $event)"
                   />
 
-                  <div class="invalid-feedback">
+                  <div
+                    v-if="errors.destination"
+                    class="text-danger small mt-1"
+                  >
                     {{ errors.destination }}
                   </div>
                 </div>
 
-                <!-- Travel distance -->
                 <div class="mb-4">
-                  <label for="distance" class="form-label fw-bold">
+                  <label
+                    for="distance"
+                    class="form-label fw-bold"
+                  >
                     Distance (km)
                   </label>
 
@@ -316,11 +499,12 @@ async function saveJourney(mode) {
                     id="distance"
                     v-model="form.distance"
                     type="number"
-                    min="0.1"
+                    min="0"
                     step="0.1"
                     class="form-control"
                     :class="{ 'is-invalid': errors.distance }"
-                    @input="clearError('distance')"
+                    @input="distanceManuallyEdited = true;
+                    clearError('distance')"
                   />
 
                   <div class="invalid-feedback">
@@ -328,180 +512,306 @@ async function saveJourney(mode) {
                   </div>
                 </div>
 
+                <p
+                  v-if="routes.driving"
+                  class="small text-muted"
+                >
+                  Estimated driving time:
+                  {{ routes.driving.durationMinutes }} minutes.
+                  Walking and cycling distances are calculated
+                  separately.
+                </p>
+
+                <p
+                  v-if="routeError"
+                  class="small text-danger"
+                  role="alert"
+                >
+                  {{ routeError }}
+                </p>
+
                 <button
                   type="submit"
                   class="btn btn-dark px-4 w-100"
+
                 >
                   Compare
                 </button>
               </form>
 
               <p class="small text-muted mt-3 mb-0">
-                Your latest comparison is saved locally on this device.
-                If you choose to save a journey, its details will also
-                be stored securely in Cloud Firestore under your account.
+                Your latest comparison is saved locally on this
+                device. If you choose to save a journey, its
+                details will also be stored securely in Cloud
+                Firestore under your account.
               </p>
             </div>
           </div>
         </div>
 
-        <!-- Result area -->
+        <!-- Map -->
         <div class="col-12 col-lg-8">
-          <section class="results-section p-4">
-            <h2 class="fw-bold mb-4">Results</h2>
+          <section aria-label="Journey route map">
+            <h2 class="h5 fw-bold mb-3">
+              Journey route
+            </h2>
 
-            <!-- Empty state -->
-            <div v-if="!formSubmitted" class="text-center py-4">
-              <img
-                src="/images/compare-empty.svg"
-                alt=""
-                class="illustration mb-3"
-                style="max-width: 320px"
-              />
+            <RouteMap
+              :start-coordinates="startCoordinates"
+              :destination-coordinates="destinationCoordinates"
+              @routes-calculated="routesCalculated"
+              @route-error="routeFailed"
+            />
 
-              <p class="text-muted mb-0">
-                Enter your journey information to compare travel options.
-              </p>
-            </div>
-
-            <!-- Comparison results -->
-            <div v-else>
-              <div class="row g-3">
-                <div
-                  v-for="mode in comparisonResults"
-                  :key="mode.id"
-                  class="col-12 col-md-6 col-xl-3"
-                >
-                  <div class="travel-card h-100 p-4">
-                    <span class="mode-icon mb-2">
-                      <AppIcon
-                        :name="{
-                          Walking: 'walk',
-                          Cycling: 'bike',
-                          'Public Transport': 'bus',
-                          Car: 'car',
-                        }[mode.name] || 'route'"
-                        :size="28"
-                      />
-                    </span>
-
-                    <h3 class="h5 text-center">
-                      {{ mode.name }}
-                    </h3>
-
-                    <div class="card-details">
-                      <strong>
-                        {{ mode.emissions }} kg CO₂
-                      </strong>
-
-                      <p class="small mb-0 mt-2">
-                        {{ mode.description }}
-                      </p>
-
-                      <!-- BR D.3 - Save Journey -->
-                      <button
-                        v-if="mode.name !== 'Car'"
-                        type="button"
-                        class="btn btn-brand btn-sm w-100 mt-3"
-                        :disabled="isSaving || !currentUser || savedModes.includes(mode.name)"
-                        @click="saveJourney(mode)"
-                      >
-                        {{ savedModes.includes(mode.name) ? 'Journey Saved' : isSaving ? 'Saving...' : 'Save Journey' }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <p
-                v-if="!currentUser"
-                class="small text-muted mt-3 mb-0"
-              >
-                Please log in to save a journey to your travel history.
-              </p>
-
-              <div
-                v-if="saveMessage"
-                class="alert mt-3 mb-0"
-                :class="saveError ? 'alert-danger' : 'alert-success'"
-                role="status"
-              >
-                {{ saveMessage }}
-              </div>
-
-              <RouterLink
-                v-if="saveMessage && !saveError"
-                to="/impact"
-                class="btn btn-brand mt-3"
-              >
-                View My Travel History
-              </RouterLink>
-            </div>
-          </section>
-
-          <!-- Existing travel comparison rating -->
-          <section class="mt-5">
-            <div class="card p-4 shadow-sm">
-              <h2 class="h4 mb-3">Rate the Travel Comparison</h2>
-
-              <p class="mb-2">
-                How useful was this travel comparison?
-              </p>
-
-              <div class="d-flex flex-wrap gap-2 mb-3">
-                <button
-                  v-for="score in 5"
-                  :key="score"
-                  type="button"
-                  class="btn d-inline-flex align-items-center gap-1"
-                  :class="
-                    selectedRating === score
-                      ? 'btn-success'
-                      : 'btn-outline-success'
-                  "
-                  @click="selectedRating = score"
-                >
-                  <AppIcon name="star" :size="16" />
-                  {{ score }}
-                </button>
-              </div>
-
-              <button
-                type="button"
-                class="btn btn-success"
-                @click="submitRating"
-              >
-                Submit Rating
-              </button>
-
-              <p v-if="ratingMessage" class="mt-3 mb-0">
-                {{ ratingMessage }}
-              </p>
-
-              <hr />
-
-              <p class="mb-1">
-                <strong>Average Rating:</strong>
-                {{ averageRating }} / 5
-              </p>
-
-              <p class="mb-0">
-                Based on {{ ratingCount }} rating(s)
-              </p>
-            </div>
+            <p class="small text-muted mt-2 mb-0">
+              Walking, cycling and driving use their own
+              Mapbox routes. Public transport uses the
+              driving-route distance as an approximate proxy,
+              not an actual public transport route.
+            </p>
           </section>
         </div>
       </div>
+
+      <!-- FULL-WIDTH RESULTS -->
+      <section class="results-section mt-5 p-4">
+        <h2 class="fw-bold mb-4">
+          Results
+        </h2>
+
+        <div
+          v-if="!formSubmitted"
+          class="text-center py-4"
+        >
+          <img
+            src="/images/compare-empty.svg"
+            alt=""
+            class="illustration mb-3"
+            style="max-width: 320px"
+          />
+
+          <p class="text-muted mb-0">
+            Enter your journey information to compare travel options.
+          </p>
+        </div>
+
+        <div v-else>
+          <p v-if="!routeReady" class="small text-muted mb-3">
+            Manual comparison: all modes use your entered distance. Travel times are
+            unavailable without a Mapbox route, and emissions are estimates.
+          </p>
+          <p v-else-if="distanceManuallyEdited" class="small text-muted mb-3">
+            You edited the driving distance. Walking and cycling distances are
+            scaled estimates based on the Mapbox routes; displayed travel times
+            remain the original Mapbox estimates.
+          </p>
+          <div class="row g-3">
+            <div
+              v-for="mode in comparisonResults"
+              :key="mode.id"
+              class="col-12 col-md-6 col-xl-3"
+            >
+              <div class="travel-card h-100">
+                <!-- Icon and heading -->
+                <div class="card-top">
+                  <span class="mode-icon">
+                    <AppIcon
+                      :name="{
+                        Walking: 'walk',
+                        Cycling: 'bike',
+                        'Public Transport': 'bus',
+                        Car: 'car',
+                      }[mode.name] || 'route'"
+                      :size="28"
+                    />
+                  </span>
+
+                  <h3 class="mode-title">
+                    {{ mode.name }}
+                  </h3>
+                </div>
+
+                <!-- Highlighted CO2 value -->
+                <div class="emissions-panel">
+                  <template v-if="mode.emissions !== null">
+                    <span class="emissions-value">
+                      {{ mode.emissions }}
+                    </span>
+                    <span class="emissions-unit">
+                      kg CO₂
+                    </span>
+                  </template>
+
+                  <span v-else class="unavailable">
+                    Route unavailable
+                  </span>
+                </div>
+
+                <!-- Distance and time -->
+                <div class="journey-stats">
+                  <div class="stat">
+                    <AppIcon name="route" :size="20" />
+
+                    <span>
+                      {{
+                        mode.distanceKm !== null
+                          ? `${mode.distanceKm} km`
+                          : 'N/A'
+                      }}
+                    </span>
+                  </div>
+
+                  <div class="stat">
+                    <AppIcon name="clock" :size="20" />
+
+                    <span>
+                      {{
+                        mode.durationMinutes !== null
+                          ? `${mode.durationMinutes} min`
+                          : '—'
+                      }}
+                    </span>
+                  </div>
+                </div>
+
+                <p
+                  v-if="mode.isProxy"
+                  class="proxy-note"
+                >
+                  Approximate distance proxy
+                </p>
+
+                <!-- Description -->
+                <p class="mode-description">
+                  {{ mode.description }}
+                </p>
+
+                <!-- Save button -->
+                <button
+                  v-if="mode.name !== 'Car'"
+                  type="button"
+                  class="btn save-journey-btn"
+                  :disabled="
+                    isSaving ||
+                    !currentUser ||
+                    mode.distanceKm === null ||
+                    savedModes.includes(mode.name)
+                  "
+                  @click="saveJourney(mode)"
+                >
+                  {{
+                    savedModes.includes(mode.name)
+                      ? 'Journey Saved'
+                      : isSaving
+                        ? 'Saving...'
+                        : 'Save Journey'
+                  }}
+                </button>
+
+                <div
+                  v-else
+                  class="car-baseline-note"
+                >
+                  Comparison baseline
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p
+            v-if="!currentUser"
+            class="small text-muted mt-3 mb-0"
+          >
+            Please log in to save a journey to your travel history.
+          </p>
+
+          <div
+            v-if="saveMessage"
+            class="alert mt-3 mb-0"
+            :class="saveError ? 'alert-danger' : 'alert-success'"
+            role="status"
+          >
+            {{ saveMessage }}
+          </div>
+
+          <RouterLink
+            v-if="saveMessage && !saveError"
+            to="/impact"
+            class="btn btn-success mt-3"
+          >
+            View My Travel History
+          </RouterLink>
+        </div>
+      </section>
+
+      <!-- FULL-WIDTH RATING: BELOW RESULTS -->
+      <section class="mt-4">
+        <div class="card border-0 shadow-sm rating-card">
+          <div class="card-body p-4">
+            <h2 class="h4 fw-bold mb-3">
+              Rate the Travel Comparison
+            </h2>
+
+            <p class="mb-3">
+              How useful was this travel comparison?
+            </p>
+
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <button
+                v-for="score in 5"
+                :key="score"
+                type="button"
+                class="btn d-inline-flex align-items-center gap-1"
+                :class="
+                  selectedRating === score
+                    ? 'btn-success'
+                    : 'btn-outline-success'
+                "
+                @click="selectedRating = score"
+              >
+                <AppIcon name="star" :size="16" />
+                {{ score }}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-success"
+              @click="submitRating"
+            >
+              Submit Rating
+            </button>
+
+            <p
+              v-if="ratingMessage"
+              class="mt-3 mb-0"
+            >
+              {{ ratingMessage }}
+            </p>
+
+            <hr />
+
+            <p class="mb-1">
+              <strong>Average Rating:</strong>
+              {{ averageRating }} / 5
+            </p>
+
+            <p class="mb-0">
+              Based on {{ ratingCount }} rating(s)
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Results area */
+/* Results background */
 .results-section {
   background-color: #dedede;
-  min-height: 420px;
-  border-radius: 8px;
+  border-radius: 12px;
+  min-height: 0;
 }
 
 /* Form inputs */
@@ -509,55 +819,170 @@ async function saveJourney(mode) {
   min-height: 48px;
 }
 
-/* Result card generated for each travel mode */
+/* Redesigned travel cards */
 .travel-card {
   background-color: #b8e8ba;
-  min-height: 330px;
+  border-radius: 12px;
+  padding: 22px 18px;
+
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  border-radius: 8px;
-}
-
-/* Keep travel mode headings aligned */
-.travel-card h3 {
-  min-height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
   text-align: center;
+
+  min-height: 0;
 }
 
-/* Circular icon badge on each result card */
+/* Icon and title */
+.card-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
 .mode-icon {
-  align-self: center;
-  width: 52px;
-  height: 52px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   background-color: #ffffff;
   color: #1c1c1c;
+
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Keep card details aligned */
-.travel-card .card-details {
-  min-height: 120px;
+.mode-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.3;
+  min-height: 48px;
+  margin: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Tablet and smaller screens */
-@media (max-width: 991.98px) {
-  .results-section {
-    min-height: auto;
-  }
+/* CO2 highlight */
+.emissions-panel {
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 9px;
+  padding: 12px 6px;
+  min-height: 60px;
 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  color: #064e3b;
+}
+
+.emissions-value {
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.emissions-unit {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.unavailable {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Distance and duration */
+.journey-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+
+  padding: 16px 0;
+  margin-top: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.stat + .stat {
+  border-left: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.stat span {
+  overflow-wrap: anywhere;
+}
+
+/* Public transport approximation */
+.proxy-note {
+  font-size: 0.75rem;
+  color: #3f5444;
+  margin: 8px 0 0;
+}
+
+/* Description */
+.mode-description {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 14px 0 18px;
+  flex-grow: 1;
+}
+
+/* Save Journey button */
+.save-journey-btn {
+  background-color: #146c43;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 12px;
+  width: 100%;
+  font-weight: 600;
+  margin-top: auto;
+}
+
+.save-journey-btn:hover:not(:disabled) {
+  background-color: #0f5132;
+  color: #ffffff;
+}
+
+.save-journey-btn:disabled {
+  opacity: 0.65;
+}
+
+/* Car comparison baseline */
+.car-baseline-note {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #375b43;
+  padding: 11px 0;
+  margin-top: auto;
+}
+
+/* Rating card */
+.rating-card {
+  border-radius: 12px;
+}
+
+/* Responsive */
+@media (max-width: 1199.98px) {
   .travel-card {
-    min-height: 220px;
+    padding: 20px;
   }
 }
 
-/* Mobile screens */
 @media (max-width: 575.98px) {
   .container {
     padding-left: 16px;
@@ -565,20 +990,23 @@ async function saveJourney(mode) {
   }
 
   .results-section {
-    padding: 20px !important;
+    padding: 18px !important;
   }
 
   .travel-card {
-    min-height: 160px;
+    padding: 20px;
   }
 
-  .travel-card h3,
-  .travel-card .card-details {
+  .mode-title {
     min-height: auto;
   }
 
-  form .btn {
-    width: 100%;
+  .emissions-value {
+    font-size: 1.5rem;
+  }
+
+  .journey-stats {
+    gap: 12px;
   }
 }
 </style>
