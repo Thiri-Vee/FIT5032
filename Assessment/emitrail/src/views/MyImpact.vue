@@ -3,6 +3,7 @@
 import { computed, ref, watch } from 'vue'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { collection, getDocs, query, where } from 'firebase/firestore'
+
 import AppIcon from '../components/AppIcon.vue'
 import InteractiveTable from '../components/InteractiveTable.vue'
 import { currentUser } from '../auth/auth.js'
@@ -34,13 +35,10 @@ async function loadJourneys(user) {
 
   if (!user?.uid) {
     loadingJourneys.value = false
-   // console.log('No signed-in user available for journey loading')
     return
   }
 
   loadingJourneys.value = true
-
-  //console.log('Starting journey query for UID:', user.uid)
 
   try {
     const journeysQuery = query(
@@ -50,25 +48,16 @@ async function loadJourneys(user) {
 
     const snapshot = await getDocs(journeysQuery)
 
-    // Debugging: check whether Firestore returned documents
-    //console.log('Firestore documents found:', snapshot.size)
-    //console.log('Firebase Auth UID:', auth.currentUser?.uid)
-    //console.log('Query UID:', user.uid)
-    //console.log('Reactive UID:', currentUser.value?.uid)
-
-    // Ignore outdated requests or a changed Firebase account
     if (
       requestId !== latestRequestId ||
       auth.currentUser?.uid !== user.uid
     ) {
-      //console.log('Ignoring outdated journey query result')
       return
     }
 
     journeys.value = snapshot.docs.map((document) => {
       const data = document.data()
 
-      // ISO date format sorts correctly in the interactive table
       let formattedDate = ''
 
       if (data.date?.toDate) {
@@ -89,8 +78,6 @@ async function loadJourneys(user) {
         co2SavedKg: Number(data.co2SavedKg ?? 0),
       }
     })
-
-    //console.log('Journeys loaded into table:', journeys.value.length)
   } catch (error) {
     console.error('Error loading journeys:', error)
 
@@ -105,7 +92,7 @@ async function loadJourneys(user) {
   }
 }
 
-// Load journeys whenever the signed-in user changes
+// Reload when the signed-in user changes
 watch(
   () => currentUser.value?.uid,
   () => {
@@ -205,6 +192,7 @@ const sendReport = async () => {
     await auth.currentUser.getIdToken(true)
 
     const functions = getFunctions(undefined, 'us-central1')
+
     const sendImpactReport = httpsCallable(
       functions,
       'sendImpactReport',
@@ -241,12 +229,21 @@ const sendReport = async () => {
   <div class="impact-page">
 
     <!-- Hero -->
-    <section class="container py-5">
+    <section
+      class="container py-5"
+      aria-labelledby="impact-heading"
+    >
       <div class="row align-items-center g-4 g-lg-5">
         <div class="col-12 col-lg-7">
-          <p class="eyebrow mb-2">My impact</p>
 
-          <h1 class="fw-bold mb-3">
+          <p class="eyebrow mb-2">
+            My impact
+          </p>
+
+          <h1
+            id="impact-heading"
+            class="fw-bold mb-3"
+          >
             Your climate impact dashboard
           </h1>
 
@@ -262,7 +259,10 @@ const sendReport = async () => {
             class="btn btn-brand btn-lg d-inline-flex align-items-center gap-2"
           >
             Log in to start tracking
-            <AppIcon name="arrow" :size="18" />
+
+            <span aria-hidden="true">
+              <AppIcon name="arrow" :size="18" />
+            </span>
           </RouterLink>
 
           <RouterLink
@@ -271,8 +271,12 @@ const sendReport = async () => {
             class="btn btn-brand btn-lg d-inline-flex align-items-center gap-2"
           >
             Log a journey
-            <AppIcon name="arrow" :size="18" />
+
+            <span aria-hidden="true">
+              <AppIcon name="arrow" :size="18" />
+            </span>
           </RouterLink>
+
         </div>
 
         <div class="col-12 col-lg-5">
@@ -285,9 +289,20 @@ const sendReport = async () => {
       </div>
     </section>
 
-    <!-- Stat cards -->
-    <section class="section-soft border-top border-bottom py-5">
+    <!-- Dashboard statistics -->
+    <section
+      class="section-soft border-top border-bottom py-5"
+      aria-labelledby="statistics-heading"
+    >
       <div class="container">
+
+        <h2
+          id="statistics-heading"
+          class="visually-hidden"
+        >
+          Your climate impact statistics
+        </h2>
+
         <div class="row g-4">
           <div
             v-for="stat in stats"
@@ -296,7 +311,11 @@ const sendReport = async () => {
           >
             <div class="card h-100 border-0 shadow-sm text-center">
               <div class="card-body p-4">
-                <span class="icon-tile mb-3">
+
+                <span
+                  class="icon-tile mb-3"
+                  aria-hidden="true"
+                >
                   <AppIcon :name="stat.icon" />
                 </span>
 
@@ -311,6 +330,7 @@ const sendReport = async () => {
                 <div class="small text-muted">
                   {{ stat.unit }}
                 </div>
+
               </div>
             </div>
           </div>
@@ -322,18 +342,29 @@ const sendReport = async () => {
         >
           Log in to view your personal climate impact statistics.
         </p>
+
       </div>
     </section>
 
-    <!-- What's tracked -->
-    <section class="container py-5">
+    <!-- What users can track -->
+    <section
+      class="container py-5"
+      aria-labelledby="tracking-heading"
+    >
       <div class="row justify-content-center text-center mb-4">
         <div class="col-12 col-lg-8">
-          <p class="eyebrow mb-2">What you can track</p>
 
-          <h2 class="fw-bold">
+          <p class="eyebrow mb-2">
+            What you can track
+          </p>
+
+          <h2
+            id="tracking-heading"
+            class="fw-bold"
+          >
             From a single trip to a lasting habit
           </h2>
+
         </div>
       </div>
 
@@ -345,7 +376,11 @@ const sendReport = async () => {
         >
           <div class="card h-100 border-0 shadow-sm">
             <div class="card-body p-4">
-              <span class="icon-tile mb-3">
+
+              <span
+                class="icon-tile mb-3"
+                aria-hidden="true"
+              >
                 <AppIcon :name="section.icon" />
               </span>
 
@@ -356,6 +391,7 @@ const sendReport = async () => {
               <p class="text-muted mb-0">
                 {{ section.text }}
               </p>
+
             </div>
           </div>
         </div>
@@ -363,16 +399,23 @@ const sendReport = async () => {
     </section>
 
     <!-- BR D.3 - Interactive Travel History Table -->
-    <section class="section-soft border-top py-5">
+    <section
+      class="section-soft border-top py-5"
+      aria-labelledby="journey-history-heading"
+    >
       <div class="container">
 
         <div class="row mb-4">
           <div class="col-12 col-lg-8">
+
             <p class="eyebrow mb-2">
               My travel history
             </p>
 
-            <h2 class="fw-bold mb-3">
+            <h2
+              id="journey-history-heading"
+              class="fw-bold mb-3"
+            >
               Your logged journeys
             </h2>
 
@@ -381,6 +424,7 @@ const sendReport = async () => {
               Search, filter and sort journeys by date,
               travel mode, distance and estimated emissions saved.
             </p>
+
           </div>
         </div>
 
@@ -390,6 +434,7 @@ const sendReport = async () => {
           class="card border-0 shadow-sm"
         >
           <div class="card-body p-4 text-center">
+
             <p class="text-muted">
               Log in to view your personal travel history.
             </p>
@@ -400,22 +445,21 @@ const sendReport = async () => {
             >
               Log in
             </RouterLink>
+
           </div>
         </div>
 
-        <!-- Loading -->
+        <!-- Loading journeys -->
         <div
           v-else-if="loadingJourneys"
           class="text-center py-4"
+          role="status"
+          aria-live="polite"
         >
           <div
             class="spinner-border text-success"
-            role="status"
-          >
-            <span class="visually-hidden">
-              Loading journeys...
-            </span>
-          </div>
+            aria-hidden="true"
+          ></div>
 
           <p class="text-muted mt-3">
             Loading your journeys...
@@ -428,11 +472,14 @@ const sendReport = async () => {
           class="alert alert-danger"
           role="alert"
         >
-          {{ journeyError }}
+          <p class="mb-2">
+            {{ journeyError }}
+          </p>
 
           <button
             type="button"
-            class="btn btn-outline-danger btn-sm ms-2"
+            class="btn btn-outline-danger btn-sm"
+            aria-label="Retry loading your journeys"
             @click="loadJourneys(currentUser)"
           >
             Retry
@@ -440,11 +487,22 @@ const sendReport = async () => {
         </div>
 
         <!-- Interactive table -->
-        <InteractiveTable
-          v-else
-          :rows="journeys"
-          :columns="journeyColumns"
-        />
+        <div v-else>
+
+          <p
+            class="visually-hidden"
+            role="status"
+            aria-live="polite"
+          >
+            {{ journeys.length }} journeys loaded.
+          </p>
+
+          <InteractiveTable
+            :rows="journeys"
+            :columns="journeyColumns"
+          />
+
+        </div>
 
         <p
           v-if="currentUser && !loadingJourneys && !journeyError"
@@ -453,35 +511,55 @@ const sendReport = async () => {
           Your travel history is retrieved from Cloud Firestore.
           Only journeys associated with your account are displayed.
         </p>
+
       </div>
     </section>
 
     <!-- BR D.2 - Email with PDF Attachment -->
-    <section class="container py-5 border-top">
+    <section
+      class="container py-5 border-top"
+      aria-labelledby="email-report-heading"
+    >
       <div class="row justify-content-center">
         <div class="col-12 col-md-9 col-lg-7">
+
           <div class="card border-0 shadow-sm">
             <div class="card-body p-4 p-md-5">
 
               <div class="d-flex align-items-center gap-3 mb-3">
-                <span class="icon-tile">
+
+                <span
+                  class="icon-tile"
+                  aria-hidden="true"
+                >
                   <AppIcon name="download" />
                 </span>
 
                 <div>
-                  <h2 class="h4 fw-bold mb-0">
+                  <h2
+                    id="email-report-heading"
+                    class="h4 fw-bold mb-0"
+                  >
                     Email My Climate Impact Report
                   </h2>
                 </div>
+
               </div>
 
-              <p class="text-muted mb-4">
+              <p
+                id="email-report-description"
+                class="text-muted mb-4"
+              >
                 Receive your current Emitrail climate impact summary
                 as a PDF attachment directly in your email inbox.
               </p>
 
               <template v-if="currentUser">
-                <p class="small mb-3">
+
+                <p
+                  id="report-email-address"
+                  class="small mb-3"
+                >
                   Report will be sent to:
                   <strong>{{ currentUser.email }}</strong>
                 </p>
@@ -490,6 +568,8 @@ const sendReport = async () => {
                   type="button"
                   class="btn btn-brand"
                   :disabled="isSending"
+                  :aria-busy="isSending"
+                  aria-describedby="email-report-description report-email-address"
                   @click="sendReport"
                 >
                   {{
@@ -498,6 +578,7 @@ const sendReport = async () => {
                       : 'Email My Report'
                   }}
                 </button>
+
               </template>
 
               <RouterLink
@@ -508,6 +589,7 @@ const sendReport = async () => {
                 Log in to Email Report
               </RouterLink>
 
+              <!-- Email request feedback -->
               <div
                 v-if="emailMessage"
                 class="alert mt-3 mb-0"
@@ -516,7 +598,8 @@ const sendReport = async () => {
                     ? 'alert-danger'
                     : 'alert-success'
                 "
-                role="status"
+                :role="emailError ? 'alert' : 'status'"
+                aria-live="polite"
               >
                 {{ emailMessage }}
               </div>
@@ -529,6 +612,7 @@ const sendReport = async () => {
 
             </div>
           </div>
+
         </div>
       </div>
     </section>
@@ -537,6 +621,19 @@ const sendReport = async () => {
 </template>
 
 <style scoped>
+/* BR E.3 - Keyboard focus visibility */
+.impact-page button:focus-visible,
+.impact-page a:focus-visible {
+  outline: 3px solid #14532d;
+  outline-offset: 3px;
+}
+
+/* Stronger focus indicator for dark or green buttons */
+.impact-page .btn-brand:focus-visible {
+  outline: 3px solid #111827;
+  outline-offset: 4px;
+}
+
 /* Mobile screens */
 @media (max-width: 575.98px) {
   h1 {
