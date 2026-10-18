@@ -1,5 +1,6 @@
+
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { addDoc, collection, Timestamp } from 'firebase/firestore'
 
 import { auth, db } from '../firebase/init.js'
@@ -33,6 +34,26 @@ const formSubmitted = ref(false)
 const savedModes = ref([])
 
 // -----------------------------------------
+// BR E.3 - Accessibility
+// -----------------------------------------
+
+const distanceRef = ref(null)
+const resultsHeadingRef = ref(null)
+const formErrorMessage = ref('')
+
+async function focusFirstError() {
+  await nextTick()
+
+  if (errors.startLocation) {
+    document.getElementById('start-location')?.focus()
+  } else if (errors.destination) {
+    document.getElementById('destination')?.focus()
+  } else if (errors.distance) {
+    distanceRef.value?.focus()
+  }
+}
+
+// -----------------------------------------
 // Mapbox routes
 // -----------------------------------------
 
@@ -52,6 +73,7 @@ const routeReady = computed(() => Boolean(routes.value.driving))
 
 function clearError(field) {
   errors[field] = ''
+  formErrorMessage.value = ''
 }
 
 function locationChanged(field) {
@@ -125,17 +147,23 @@ function routeFailed(message) {
     driving: null,
   }
 
-  if (!distanceManuallyEdited.value) form.distance = ''
+  if (!distanceManuallyEdited.value) {
+    form.distance = ''
+  }
+
   routeError.value = message
 }
 
 function distanceForMode(modeName) {
   const enteredDistance = Number(form.distance)
-  if (!Number.isFinite(enteredDistance) || enteredDistance <= 0) return null
+
+  if (!Number.isFinite(enteredDistance) || enteredDistance <= 0) {
+    return null
+  }
 
   const drivingDistance = routes.value.driving?.distanceKm
+
   if (!drivingDistance || drivingDistance <= 0) {
-    // Manual fallback: use the entered distance for each mode.
     return enteredDistance
   }
 
@@ -143,17 +171,26 @@ function distanceForMode(modeName) {
     return enteredDistance
   }
 
-  const route = modeName === 'Walking'
-    ? routes.value.walking
-    : modeName === 'Cycling'
-      ? routes.value.cycling
-      : null
+  const route =
+    modeName === 'Walking'
+      ? routes.value.walking
+      : modeName === 'Cycling'
+        ? routes.value.cycling
+        : null
 
   if (!route) return null
-  return Number((enteredDistance * route.distanceKm / drivingDistance).toFixed(2))
+
+  return Number(
+    (
+      (enteredDistance * route.distanceKm) /
+      drivingDistance
+    ).toFixed(2),
+  )
 }
+
 function durationForMode(modeName) {
   if (distanceManuallyEdited.value) return null
+
   if (modeName === 'Walking') {
     return routes.value.walking?.durationMinutes ?? null
   }
@@ -170,12 +207,15 @@ function durationForMode(modeName) {
 }
 
 // -----------------------------------------
-// CO₂ comparison results
+// CO2 comparison results
 // -----------------------------------------
 
 const comparisonResults = computed(() => {
   const distance = Number(form.distance)
-  if (!Number.isFinite(distance) || distance <= 0) return []
+
+  if (!Number.isFinite(distance) || distance <= 0) {
+    return []
+  }
 
   return travelModes.map((mode) => {
     const distanceKm = distanceForMode(mode.name)
@@ -217,7 +257,8 @@ function validateForm() {
     errors.startLocation = 'Please enter a valid start location.'
     isValid = false
   } else if (!startCoordinates.value) {
-    errors.startLocation = 'Please select a valid start location from the suggestions.'
+    errors.startLocation =
+      'Please select a valid start location from the suggestions.'
     isValid = false
   }
 
@@ -231,7 +272,8 @@ function validateForm() {
     errors.destination = 'Please enter a valid destination.'
     isValid = false
   } else if (!destinationCoordinates.value) {
-    errors.destination = 'Please select a valid destination from the suggestions.'
+    errors.destination =
+      'Please select a valid destination from the suggestions.'
     isValid = false
   }
 
@@ -252,12 +294,18 @@ function validateForm() {
 // Compare travel
 // -----------------------------------------
 
-function compareTravel() {
+async function compareTravel() {
   if (!validateForm()) {
     formSubmitted.value = false
+
+    formErrorMessage.value =
+      'Please correct the highlighted journey details.'
+
+    await focusFirstError()
     return
   }
 
+  formErrorMessage.value = ''
   formSubmitted.value = true
   savedModes.value = []
   saveMessage.value = ''
@@ -272,6 +320,10 @@ function compareTravel() {
       date: new Date().toISOString(),
     }),
   )
+
+  // BR E.3 - Focus the results after successful comparison
+  await nextTick()
+  resultsHeadingRef.value?.focus()
 }
 
 watch(form, () => {
@@ -334,8 +386,11 @@ async function saveJourney(mode) {
   }
 
   const drivingDistanceKm = Number(form.distance)
-  const carEmissions = drivingDistanceKm * carMode.emissionFactor
-  const selectedEmissions = distanceKm * mode.emissionFactor
+  const carEmissions =
+    drivingDistanceKm * carMode.emissionFactor
+
+  const selectedEmissions =
+    distanceKm * mode.emissionFactor
 
   const co2SavedKg = Number(
     Math.max(0, carEmissions - selectedEmissions).toFixed(2),
@@ -363,7 +418,10 @@ async function saveJourney(mode) {
     saveError.value = false
   } catch (error) {
     console.error('Error saving journey:', error)
-    saveMessage.value = 'Unable to save your journey. Please try again.'
+
+    saveMessage.value =
+      'Unable to save your journey. Please try again.'
+
     saveError.value = true
   } finally {
     isSaving.value = false
@@ -394,7 +452,8 @@ function submitRating() {
   }
 
   if (!auth.currentUser) {
-    ratingMessage.value = 'Please log in before submitting a rating.'
+    ratingMessage.value =
+      'Please log in before submitting a rating.'
     return
   }
 
@@ -414,12 +473,16 @@ onMounted(loadRatingSummary)
 
 <template>
   <div class="compare-page">
+
     <!-- Introduction -->
     <section class="section-soft border-bottom">
       <div class="container py-5">
         <div class="row justify-content-center text-center">
           <div class="col-12 col-lg-9">
-            <p class="eyebrow mb-2">Active travel comparison</p>
+
+            <p class="eyebrow mb-2">
+              Active travel comparison
+            </p>
 
             <h1 class="fw-bold mb-3">
               Compare how you travel
@@ -431,62 +494,107 @@ onMounted(loadRatingSummary)
               estimated emissions, using established published
               emission-factor data.
             </p>
+
           </div>
         </div>
       </div>
     </section>
 
     <div class="container py-5">
-      <!-- TOP: Journey details + Map -->
+
+      <!-- Journey details and map -->
       <div class="row g-4 g-lg-5 align-items-start">
+
+        <!-- Journey form -->
         <div class="col-12 col-lg-4">
           <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
+
               <h2 class="h5 fw-bold mb-3">
                 Journey details
               </h2>
 
-              <form @submit.prevent="compareTravel" novalidate>
+              <form
+                @submit.prevent="compareTravel"
+                novalidate
+                aria-label="Journey comparison form"
+              >
+
+                <!-- Start location -->
                 <div class="mb-4">
-                  <label class="form-label fw-bold">
+                  <label
+                    for="start-location"
+                    class="form-label fw-bold"
+                  >
                     Start location
                   </label>
 
                   <LocationSearch
+                    id="start-location"
                     v-model="form.startLocation"
                     placeholder="Search start location"
-                    @update:model-value="locationChanged('startLocation')"
-                    @select="locationSelected('startLocation', $event)"
+                    :aria-invalid="Boolean(errors.startLocation)"
+                    :aria-describedby="
+                      errors.startLocation
+                        ? 'start-location-error'
+                        : undefined
+                    "
+                    @update:model-value="
+                      locationChanged('startLocation')
+                    "
+                    @select="
+                      locationSelected('startLocation', $event)
+                    "
                   />
 
                   <div
                     v-if="errors.startLocation"
+                    id="start-location-error"
                     class="text-danger small mt-1"
+                    role="alert"
                   >
                     {{ errors.startLocation }}
                   </div>
                 </div>
 
+                <!-- Destination -->
                 <div class="mb-4">
-                  <label class="form-label fw-bold">
+                  <label
+                    for="destination"
+                    class="form-label fw-bold"
+                  >
                     Destination
                   </label>
 
                   <LocationSearch
+                    id="destination"
                     v-model="form.destination"
                     placeholder="Search destination"
-                    @update:model-value="locationChanged('destination')"
-                    @select="locationSelected('destination', $event)"
+                    :aria-invalid="Boolean(errors.destination)"
+                    :aria-describedby="
+                      errors.destination
+                        ? 'destination-error'
+                        : undefined
+                    "
+                    @update:model-value="
+                      locationChanged('destination')
+                    "
+                    @select="
+                      locationSelected('destination', $event)
+                    "
                   />
 
                   <div
                     v-if="errors.destination"
+                    id="destination-error"
                     class="text-danger small mt-1"
+                    role="alert"
                   >
                     {{ errors.destination }}
                   </div>
                 </div>
 
+                <!-- Distance -->
                 <div class="mb-4">
                   <label
                     for="distance"
@@ -497,21 +605,38 @@ onMounted(loadRatingSummary)
 
                   <input
                     id="distance"
+                    ref="distanceRef"
                     v-model="form.distance"
                     type="number"
                     min="0"
                     step="0.1"
                     class="form-control"
-                    :class="{ 'is-invalid': errors.distance }"
-                    @input="distanceManuallyEdited = true;
-                    clearError('distance')"
+                    :class="{
+                      'is-invalid': errors.distance
+                    }"
+                    :aria-invalid="Boolean(errors.distance)"
+                    :aria-describedby="
+                      errors.distance
+                        ? 'distance-error'
+                        : undefined
+                    "
+                    @input="
+                      distanceManuallyEdited = true;
+                      clearError('distance')
+                    "
                   />
 
-                  <div class="invalid-feedback">
+                  <div
+                    v-if="errors.distance"
+                    id="distance-error"
+                    class="invalid-feedback d-block"
+                    role="alert"
+                  >
                     {{ errors.distance }}
                   </div>
                 </div>
 
+                <!-- Route information -->
                 <p
                   v-if="routes.driving"
                   class="small text-muted"
@@ -530,13 +655,23 @@ onMounted(loadRatingSummary)
                   {{ routeError }}
                 </p>
 
+                <!-- Form error summary -->
+                <p
+                  v-if="formErrorMessage"
+                  class="small text-danger"
+                  role="alert"
+                >
+                  {{ formErrorMessage }}
+                </p>
+
+                <!-- Compare button -->
                 <button
                   type="submit"
                   class="btn btn-dark px-4 w-100"
-
                 >
                   Compare
                 </button>
+
               </form>
 
               <p class="small text-muted mt-3 mb-0">
@@ -545,14 +680,19 @@ onMounted(loadRatingSummary)
                 details will also be stored securely in Cloud
                 Firestore under your account.
               </p>
+
             </div>
           </div>
         </div>
 
         <!-- Map -->
         <div class="col-12 col-lg-8">
-          <section aria-label="Journey route map">
-            <h2 class="h5 fw-bold mb-3">
+          <section aria-labelledby="journey-route-heading">
+
+            <h2
+              id="journey-route-heading"
+              class="h5 fw-bold mb-3"
+            >
               Journey route
             </h2>
 
@@ -569,16 +709,27 @@ onMounted(loadRatingSummary)
               driving-route distance as an approximate proxy,
               not an actual public transport route.
             </p>
+
           </section>
         </div>
       </div>
 
-      <!-- FULL-WIDTH RESULTS -->
-      <section class="results-section mt-5 p-4">
-        <h2 class="fw-bold mb-4">
+      <!-- Results -->
+      <section
+        class="results-section mt-5 p-4"
+        aria-labelledby="results-heading"
+      >
+
+        <h2
+          id="results-heading"
+          ref="resultsHeadingRef"
+          class="fw-bold mb-4"
+          tabindex="-1"
+        >
           Results
         </h2>
 
+        <!-- Empty results -->
         <div
           v-if="!formSubmitted"
           class="text-center py-4"
@@ -595,26 +746,44 @@ onMounted(loadRatingSummary)
           </p>
         </div>
 
+        <!-- Comparison results -->
         <div v-else>
-          <p v-if="!routeReady" class="small text-muted mb-3">
-            Manual comparison: all modes use your entered distance. Travel times are
-            unavailable without a Mapbox route, and emissions are estimates.
+
+          <p
+            v-if="!routeReady"
+            class="small text-muted mb-3"
+          >
+            Manual comparison: all modes use your entered
+            distance. Travel times are unavailable without
+            a Mapbox route, and emissions are estimates.
           </p>
-          <p v-else-if="distanceManuallyEdited" class="small text-muted mb-3">
-            You edited the driving distance. Walking and cycling distances are
-            scaled estimates based on the Mapbox routes; displayed travel times
+
+          <p
+            v-else-if="distanceManuallyEdited"
+            class="small text-muted mb-3"
+          >
+            You edited the driving distance. Walking and
+            cycling distances are scaled estimates based
+            on the Mapbox routes; displayed travel times
             remain the original Mapbox estimates.
           </p>
+
           <div class="row g-3">
+
             <div
               v-for="mode in comparisonResults"
               :key="mode.id"
               class="col-12 col-md-6 col-xl-3"
             >
               <div class="travel-card h-100">
-                <!-- Icon and heading -->
+
+                <!-- Mode icon and heading -->
                 <div class="card-top">
-                  <span class="mode-icon">
+
+                  <span
+                    class="mode-icon"
+                    aria-hidden="true"
+                  >
                     <AppIcon
                       :name="{
                         Walking: 'walk',
@@ -631,26 +800,36 @@ onMounted(loadRatingSummary)
                   </h3>
                 </div>
 
-                <!-- Highlighted CO2 value -->
+                <!-- CO2 emissions -->
                 <div class="emissions-panel">
+
                   <template v-if="mode.emissions !== null">
+
                     <span class="emissions-value">
                       {{ mode.emissions }}
                     </span>
+
                     <span class="emissions-unit">
                       kg CO₂
                     </span>
+
                   </template>
 
-                  <span v-else class="unavailable">
+                  <span
+                    v-else
+                    class="unavailable"
+                  >
                     Route unavailable
                   </span>
                 </div>
 
                 <!-- Distance and time -->
                 <div class="journey-stats">
+
                   <div class="stat">
-                    <AppIcon name="route" :size="20" />
+                    <span aria-hidden="true">
+                      <AppIcon name="route" :size="20" />
+                    </span>
 
                     <span>
                       {{
@@ -662,7 +841,9 @@ onMounted(loadRatingSummary)
                   </div>
 
                   <div class="stat">
-                    <AppIcon name="clock" :size="20" />
+                    <span aria-hidden="true">
+                      <AppIcon name="clock" :size="20" />
+                    </span>
 
                     <span>
                       {{
@@ -672,6 +853,7 @@ onMounted(loadRatingSummary)
                       }}
                     </span>
                   </div>
+
                 </div>
 
                 <p
@@ -681,16 +863,20 @@ onMounted(loadRatingSummary)
                   Approximate distance proxy
                 </p>
 
-                <!-- Description -->
                 <p class="mode-description">
                   {{ mode.description }}
                 </p>
 
-                <!-- Save button -->
+                <!-- Save journey -->
                 <button
                   v-if="mode.name !== 'Car'"
                   type="button"
                   class="btn save-journey-btn"
+                  :aria-label="
+                    savedModes.includes(mode.name)
+                      ? `${mode.name} journey saved`
+                      : `Save ${mode.name} journey`
+                  "
                   :disabled="
                     isSaving ||
                     !currentUser ||
@@ -714,6 +900,7 @@ onMounted(loadRatingSummary)
                 >
                   Comparison baseline
                 </div>
+
               </div>
             </div>
           </div>
@@ -725,11 +912,17 @@ onMounted(loadRatingSummary)
             Please log in to save a journey to your travel history.
           </p>
 
+          <!-- Firestore save feedback -->
           <div
             v-if="saveMessage"
             class="alert mt-3 mb-0"
-            :class="saveError ? 'alert-danger' : 'alert-success'"
-            role="status"
+            :class="
+              saveError
+                ? 'alert-danger'
+                : 'alert-success'
+            "
+            :role="saveError ? 'alert' : 'status'"
+            aria-live="polite"
           >
             {{ saveMessage }}
           </div>
@@ -741,22 +934,38 @@ onMounted(loadRatingSummary)
           >
             View My Travel History
           </RouterLink>
+
         </div>
       </section>
 
-      <!-- FULL-WIDTH RATING: BELOW RESULTS -->
-      <section class="mt-4">
+      <!-- Rating -->
+      <section
+        class="mt-4"
+        aria-labelledby="rating-heading"
+      >
         <div class="card border-0 shadow-sm rating-card">
           <div class="card-body p-4">
-            <h2 class="h4 fw-bold mb-3">
+
+            <h2
+              id="rating-heading"
+              class="h4 fw-bold mb-3"
+            >
               Rate the Travel Comparison
             </h2>
 
-            <p class="mb-3">
+            <p
+              id="rating-description"
+              class="mb-3"
+            >
               How useful was this travel comparison?
             </p>
 
-            <div class="d-flex flex-wrap gap-2 mb-3">
+            <!-- Accessible rating buttons -->
+            <div
+              class="d-flex flex-wrap gap-2 mb-3"
+              role="group"
+              aria-labelledby="rating-description"
+            >
               <button
                 v-for="score in 5"
                 :key="score"
@@ -767,9 +976,13 @@ onMounted(loadRatingSummary)
                     ? 'btn-success'
                     : 'btn-outline-success'
                 "
+                :aria-pressed="selectedRating === score"
+                :aria-label="`Rate ${score} out of 5 stars`"
                 @click="selectedRating = score"
               >
-                <AppIcon name="star" :size="16" />
+                <span aria-hidden="true">
+                  <AppIcon name="star" :size="16" />
+                </span>
                 {{ score }}
               </button>
             </div>
@@ -785,6 +998,8 @@ onMounted(loadRatingSummary)
             <p
               v-if="ratingMessage"
               class="mt-3 mb-0"
+              role="status"
+              aria-live="polite"
             >
               {{ ratingMessage }}
             </p>
@@ -799,9 +1014,11 @@ onMounted(loadRatingSummary)
             <p class="mb-0">
               Based on {{ ratingCount }} rating(s)
             </p>
+
           </div>
         </div>
       </section>
+
     </div>
   </div>
 </template>
@@ -974,6 +1191,27 @@ onMounted(loadRatingSummary)
 /* Rating card */
 .rating-card {
   border-radius: 12px;
+}
+
+/* BR E.3 - Visible keyboard focus */
+.compare-page button:focus-visible,
+.compare-page a:focus-visible,
+.compare-page input:focus-visible {
+  outline: 3px solid #14532d;
+  outline-offset: 3px;
+}
+
+/* Visible focus for results heading */
+.compare-page h2:focus {
+  outline: 3px solid #14532d;
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+
+/* Strong focus for green buttons */
+.save-journey-btn:focus-visible {
+  outline: 3px solid #111827;
+  outline-offset: 3px;
 }
 
 /* Responsive */
