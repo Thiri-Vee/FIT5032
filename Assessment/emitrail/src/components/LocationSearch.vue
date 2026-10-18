@@ -1,208 +1,588 @@
 
 <script setup>
-import { ref, watch, onBeforeUnmount } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onBeforeUnmount,
+  useId,
+} from 'vue'
 
-const props = defineProps({
-  modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: 'Search for a location' },
+defineOptions({
+  inheritAttrs: false,
 })
 
-const emit = defineEmits(['update:modelValue', 'select'])
+const props = defineProps({
+  modelValue: {
+    type: String,
+    default: '',
+  },
+  placeholder: {
+    type: String,
+    default: 'Search for a location',
+  },
+})
+
+const emit = defineEmits([
+  'update:modelValue',
+  'select',
+])
+
+// -----------------------------------------
+// Mapbox Search Box API
+// -----------------------------------------
+
+const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
 
 const suggestions = ref([])
 const loading = ref(false)
-const error = ref('')
-const selecting = ref(false)
+const errorMessage = ref('')
 
-let searchTimer = null
-let controller = null
+const inputRef = ref(null)
+const listboxRef = ref(null)
+const activeIndex = ref(-1)
+
+const componentId = useId()
+const listboxId = `${componentId}-listbox`
+const statusId = `${componentId}-status`
+
+let debounceTimer = null
+let abortController = null
 let requestId = 0
+let sessionToken = createSessionToken()
+let selecting = false
 
-// One session ID groups search suggestions and selection.
-// A fresh ID is created after a successful selection.
-const createSessionId = () =>
-  globalThis.crypto?.randomUUID?.() ??
-  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.floor(Math.random() * 16)
-    return (c === 'x' ? r : (r & 3) | 8).toString(16)
-  })
+function createSessionToken() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
 
-let sessionToken = createSessionId()
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
-const accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
+const listOpen = computed(() => suggestions.value.length > 0)
+
+const activeOptionId = computed(() => {
+  if (!listOpen.value || activeIndex.value < 0) {
+    return undefined
+  }
+
+  return `${componentId}-option-${activeIndex.value}`
+})
+
+// -----------------------------------------
+// BR E.3 - Accessibility
+// -----------------------------------------
+
+function focusInput() {
+  inputRef.value?.focus()
+}
+
+defineExpose({
+  focus: focusInput,
+})
+
+function closeSuggestions() {
+  suggestions.value = []
+  activeIndex.value = -1
+}
+
+function cancelPendingSearch() {
+  clearTimeout(debounceTimer)
+  debounceTimer = null
+
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
+
+  requestId++
+}
+
+// Automatically scroll to the highlighted option
+watch(activeIndex, async (index) => {
+  if (index < 0) return
+
+  await nextTick()
+
+  const listbox = listboxRef.value
+  const option = listbox?.querySelector(
+    `[data-option-index="${index}"]`,
+  )
+
+  if (!listbox || !option) return
+
+  const optionTop = option.offsetTop
+  const optionBottom = optionTop + option.offsetHeight
+
+  if (optionTop < listbox.scrollTop) {
+    listbox.scrollTop = optionTop
+  } else if (
+    optionBottom >
+    listbox.scrollTop + listbox.clientHeight
+  ) {
+    listbox.scrollTop =
+      optionBottom - listbox.clientHeight
+  }
+})
+
+function handleKeydown(event) {
+  if (event.key === 'Escape') {
+    if (listOpen.value || loading.value) {
+      event.preventDefault()
+      cancelPendingSearch()
+      closeSuggestions()
+      loading.value = false
+    }
+    return
+  }
+
+  if (event.key === 'ArrowDown') {
+    if (!listOpen.value) return
+
+    event.preventDefault()
+
+    activeIndex.value =
+      activeIndex.value < suggestions.value.length - 1
+        ? activeIndex.value + 1
+        : 0
+
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    if (!listOpen.value) return
+
+    event.preventDefault()
+
+    activeIndex.value =
+      activeIndex.value > 0
+        ? activeIndex.value - 1
+        : suggestions.value.length - 1
+
+    return
+  }
+
+  if (event.key === 'Enter') {
+    if (!listOpen.value) return
+
+    event.preventDefault()
+
+    const index =
+      activeIndex.value >= 0
+        ? activeIndex.value
+        : 0
+
+    const suggestion = suggestions.value[index]
+
+    if (suggestion) {
+      selectLocation(suggestion)
+    }
+  }
+}
+
+// -----------------------------------------
+// Mapbox suggestions
+// -----------------------------------------
+
+function getSuggestionName(suggestion) {
+  return (
+    suggestion.full_address ||
+    suggestion.place_formatted ||
+    suggestion.name ||
+    suggestion.address ||
+    'Unknown location'
+  )
+}
+
+async function fetchSuggestions(query) {
+  cancelPendingSearch()
+
+  const currentRequest = requestId
+
+  if (!query.trim()) {
+    closeSuggestions()
+    loading.value = false
+    errorMessage.value = ''
+    return
+  }
+
+  if (!mapboxToken) {
+    errorMessage.value = 'Mapbox access token is missing.'
+    closeSuggestions()
+    return
+  }
+
+  loading.value = true
+  errorMessage.value = ''
+
+  const controller = new AbortController()
+  abortController = controller
+
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      access_token: mapboxToken,
+      session_token: sessionToken,
+      limit: '8',
+      language: 'en',
+    })
+
+    const response = await fetch(
+      `https://api.mapbox.com/search/searchbox/v1/suggest?${params.toString()}`,
+      {
+        signal: controller.signal,
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error('Unable to load location suggestions.')
+    }
+
+    const data = await response.json()
+
+    if (currentRequest !== requestId) return
+
+    suggestions.value = Array.isArray(data.suggestions)
+      ? data.suggestions
+      : []
+
+    activeIndex.value = -1
+  } catch (error) {
+    if (error.name === 'AbortError') return
+    if (currentRequest !== requestId) return
+
+    errorMessage.value =
+      'Unable to search locations. Please try again.'
+
+    closeSuggestions()
+  } finally {
+    if (currentRequest === requestId) {
+      loading.value = false
+      abortController = null
+    }
+  }
+}
+
+// -----------------------------------------
+// Input changes
+// -----------------------------------------
+
+function handleInput(event) {
+  const value = event.target.value
+
+  selecting = false
+
+  emit('update:modelValue', value)
+
+  cancelPendingSearch()
+  closeSuggestions()
+
+  if (!value.trim()) {
+    loading.value = false
+    errorMessage.value = ''
+    return
+  }
+
+  debounceTimer = setTimeout(() => {
+    fetchSuggestions(value)
+  }, 300)
+}
 
 watch(
   () => props.modelValue,
   (value) => {
-    clearTimeout(searchTimer)
-    controller?.abort()
-    const id = ++requestId
-
-    suggestions.value = []
-    error.value = ''
-
-    if (selecting.value) {
-      selecting.value = false
+    if (selecting) {
+      selecting = false
       return
     }
 
-    if (!value || value.trim().length < 3) {
-      loading.value = false
-      return
+    if (!value.trim()) {
+      cancelPendingSearch()
+      closeSuggestions()
     }
-
-    searchTimer = setTimeout(async () => {
-      const activeController = new AbortController()
-      controller = activeController
-      loading.value = true
-
-      try {
-        const params = new URLSearchParams({
-          q: value.trim(),
-          access_token: accessToken,
-          session_token: sessionToken,
-          limit: '10',
-          country: 'AU',
-          language: 'en',
-          proximity: '145.1340,-37.9105',
-        })
-
-        const response = await fetch(
-          `https://api.mapbox.com/search/searchbox/v1/suggest?${params}`,
-          { signal: activeController.signal },
-        )
-
-        if (!response.ok) {
-          throw new Error(`Search request failed: ${response.status}`)
-        }
-
-        const data = await response.json()
-
-        if (id !== requestId) return
-
-        suggestions.value = data.suggestions || []
-      } catch (err) {
-        if (err.name !== 'AbortError' && id === requestId) {
-          console.error('Mapbox search error:', err)
-          error.value = 'Unable to search locations. Please try again.'
-        }
-      } finally {
-        if (id === requestId) loading.value = false
-      }
-    }, 400)
   },
 )
 
-async function selectLocation(suggestion) {
-  clearTimeout(searchTimer)
-  controller?.abort()
-  ++requestId
+// -----------------------------------------
+// Retrieve selected location
+// -----------------------------------------
 
-  suggestions.value = []
-  error.value = ''
+async function selectLocation(suggestion) {
+  if (!suggestion?.mapbox_id) return
+
+  selecting = true
+
+  cancelPendingSearch()
+  closeSuggestions()
+
+  const name = getSuggestionName(suggestion)
+
+  emit('update:modelValue', name)
+
   loading.value = true
+  errorMessage.value = ''
+
+  const controller = new AbortController()
+  abortController = controller
+
+  const currentRequest = requestId
 
   try {
     const params = new URLSearchParams({
-      access_token: accessToken,
+      access_token: mapboxToken,
       session_token: sessionToken,
     })
 
     const response = await fetch(
-      `https://api.mapbox.com/search/searchbox/v1/retrieve/${encodeURIComponent(suggestion.mapbox_id)}?${params}`,
+      `https://api.mapbox.com/search/searchbox/v1/retrieve/${encodeURIComponent(
+        suggestion.mapbox_id,
+      )}?${params.toString()}`,
+      {
+        signal: controller.signal,
+      },
     )
 
     if (!response.ok) {
-      throw new Error(`Retrieve request failed: ${response.status}`)
+      throw new Error('Unable to retrieve selected location.')
     }
 
     const data = await response.json()
+
+    if (currentRequest !== requestId) return
+
     const feature = data.features?.[0]
+
     const coordinates = feature?.geometry?.coordinates
 
-    if (!coordinates || coordinates.length < 2) {
-      throw new Error('No coordinates returned for this location')
+    if (
+      !Array.isArray(coordinates) ||
+      coordinates.length < 2 ||
+      !coordinates.every(Number.isFinite)
+    ) {
+      throw new Error('Selected location has invalid coordinates.')
     }
 
-    const locationName =
-      feature.properties?.full_address ||
-      feature.properties?.name ||
-      suggestion.name
-
-    selecting.value = true
-    emit('update:modelValue', locationName)
-
     emit('select', {
-      name: locationName,
+      name,
       coordinates,
     })
 
-    sessionToken = createSessionId()
-  } catch (err) {
-    console.error('Mapbox retrieve error:', err)
-    error.value = 'Unable to select this location. Please try again.'
+    sessionToken = createSessionToken()
+  } catch (error) {
+    if (error.name === 'AbortError') return
+    if (currentRequest !== requestId) return
+
+    errorMessage.value =
+      'Unable to retrieve this location. Please choose another suggestion.'
   } finally {
-    loading.value = false
+    if (currentRequest === requestId) {
+      loading.value = false
+      abortController = null
+    }
   }
 }
 
+function handleFocusOut(event) {
+  if (
+    event.relatedTarget &&
+    event.currentTarget.contains(event.relatedTarget)
+  ) {
+    return
+  }
+
+  cancelPendingSearch()
+  closeSuggestions()
+  loading.value = false
+}
+
 onBeforeUnmount(() => {
-  clearTimeout(searchTimer)
-  controller?.abort()
-  ++requestId
+  cancelPendingSearch()
+})
+
+// -----------------------------------------
+// Screen-reader messages
+// -----------------------------------------
+
+const statusMessage = computed(() => {
+  if (loading.value) {
+    return 'Searching for locations.'
+  }
+
+  if (suggestions.value.length > 0) {
+    return `${suggestions.value.length} location suggestions available. Use the up and down arrow keys to navigate and Enter to select.`
+  }
+
+  return ''
 })
 </script>
 
 <template>
-  <div class="location-search position-relative">
+  <div
+    class="location-search position-relative"
+    @focusout="handleFocusOut"
+  >
     <input
+      v-bind="$attrs"
+      ref="inputRef"
       type="text"
       class="form-control"
+      :class="{
+        'is-invalid': $attrs['aria-invalid'] === true ||
+          $attrs['aria-invalid'] === 'true'
+      }"
       :value="modelValue"
       :placeholder="placeholder"
+      role="combobox"
+      aria-autocomplete="list"
+      :aria-expanded="listOpen"
+      :aria-controls="listboxId"
+      :aria-activedescendant="activeOptionId"
+      :aria-describedby="[
+        statusId,
+        $attrs['aria-describedby']
+      ].filter(Boolean).join(' ')"
       autocomplete="off"
-      @input="emit('update:modelValue', $event.target.value)"
+      @input="handleInput"
+      @keydown="handleKeydown"
     />
 
+    <!-- Mapbox suggestions -->
     <div
-      v-if="suggestions.length"
-      class="list-group position-absolute w-100 shadow-sm suggestions"
+      v-if="listOpen"
+      :id="listboxId"
+      ref="listboxRef"
+      class="suggestions"
+      role="listbox"
+      :aria-label="`${placeholder} suggestions`"
     >
-      <button
-        v-for="suggestion in suggestions"
-        :key="suggestion.mapbox_id"
-        type="button"
-        class="list-group-item list-group-item-action text-start"
+      <div
+        v-for="(suggestion, index) in suggestions"
+        :id="`${componentId}-option-${index}`"
+        :key="suggestion.mapbox_id || index"
+        class="suggestion-item"
+        :class="{
+          'suggestion-active': activeIndex === index
+        }"
+        :data-option-index="index"
+        role="option"
+        :aria-selected="activeIndex === index"
+        @mousedown.prevent
         @click="selectLocation(suggestion)"
       >
-        <strong>{{ suggestion.name }}</strong>
+        <span class="suggestion-name">
+          {{ suggestion.name || getSuggestionName(suggestion) }}
+        </span>
+
         <span
           v-if="suggestion.place_formatted"
-          class="d-block small text-muted"
+          class="suggestion-description"
         >
           {{ suggestion.place_formatted }}
         </span>
-      </button>
+      </div>
     </div>
 
-    <p v-if="loading" class="small text-muted mt-1 mb-0">
+    <!-- Loading indicator -->
+    <p
+      v-if="loading"
+      class="small text-muted mt-1 mb-0"
+      aria-hidden="true"
+    >
       Searching locations...
     </p>
 
-    <p v-if="error" class="small text-danger mt-1 mb-0">
-      {{ error }}
+    <!-- Screen-reader status -->
+    <span
+      :id="statusId"
+      class="visually-hidden"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {{ statusMessage }}
+    </span>
+
+    <!-- Search errors -->
+    <p
+      v-if="errorMessage"
+      class="small text-danger mt-1 mb-0"
+      role="alert"
+    >
+      {{ errorMessage }}
     </p>
   </div>
 </template>
 
 <style scoped>
-.suggestions {
-  z-index: 1000;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
 .location-search {
   width: 100%;
+}
+
+.form-control {
+  min-height: 48px;
+}
+
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+
+  max-height: 240px;
+  overflow-y: auto;
+
+  background-color: #ffffff;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+
+.suggestion-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-active {
+  background-color: #d1fae5;
+  color: #064e3b;
+}
+
+.suggestion-name {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.suggestion-description {
+  display: block;
+  font-size: 0.82rem;
+  color: #4b5563;
+  margin-top: 2px;
+}
+
+.form-control:focus-visible {
+  outline: 3px solid #14532d;
+  outline-offset: 2px;
+}
+
+.form-control.is-invalid {
+  border-color: #b42318;
+}
+
+@media (max-width: 575.98px) {
+  .suggestions {
+    max-height: 200px;
+  }
 }
 </style>
