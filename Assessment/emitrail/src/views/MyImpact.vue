@@ -4,13 +4,41 @@ import { computed, ref, watch } from 'vue'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 
+import {
+  Chart as ChartJS,
+  ArcElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js'
+import { Doughnut, Line } from 'vue-chartjs'
+
 import AppIcon from '../components/AppIcon.vue'
 import InteractiveTable from '../components/InteractiveTable.vue'
 import { currentUser } from '../auth/auth.js'
 import { auth, db } from '../firebase/init.js'
 
 // --------------------------------------------------
-// BR D.3 - Interactive Travel History Table
+// BR F.1 - Register Chart.js components
+// --------------------------------------------------
+
+ChartJS.register(
+  ArcElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler,
+)
+
+// --------------------------------------------------
+// BR D.3 - Firestore Journey History
 // --------------------------------------------------
 
 const journeys = ref([])
@@ -24,7 +52,6 @@ const journeyColumns = [
   { key: 'co2SavedKg', label: 'CO₂ Saved (kg)' },
 ]
 
-// Track requests so older results cannot overwrite newer ones
 let latestRequestId = 0
 
 async function loadJourneys(user) {
@@ -92,7 +119,6 @@ async function loadJourneys(user) {
   }
 }
 
-// Reload when the signed-in user changes
 watch(
   () => currentUser.value?.uid,
   () => {
@@ -102,7 +128,7 @@ watch(
 )
 
 // --------------------------------------------------
-// Dynamic Climate Impact Dashboard Statistics
+// Existing Climate Impact Statistics
 // --------------------------------------------------
 
 const stats = computed(() => {
@@ -145,6 +171,233 @@ const stats = computed(() => {
 })
 
 // --------------------------------------------------
+// BR F.1 - Innovation 2: Interactive Charts
+// --------------------------------------------------
+
+// Select between daily and monthly CO2 trends
+const chartPeriod = ref('monthly')
+
+// Count journeys by travel mode
+const journeysByMode = computed(() => {
+  const counts = {}
+
+  journeys.value.forEach((journey) => {
+    const mode = String(journey.mode || 'Unknown').trim()
+    const label = mode || 'Unknown'
+
+    counts[label] = (counts[label] || 0) + 1
+  })
+
+  return Object.entries(counts).sort(
+    (a, b) => b[1] - a[1],
+  )
+})
+
+// Doughnut chart data
+const travelModeChartData = computed(() => ({
+  labels: journeysByMode.value.map(([mode]) => mode),
+
+  datasets: [
+    {
+      label: 'Journeys',
+      data: journeysByMode.value.map(([, count]) => count),
+      backgroundColor: [
+        '#166534',
+        '#22c55e',
+        '#86efac',
+        '#0d9488',
+        '#38bdf8',
+        '#f59e0b',
+        '#8b5cf6',
+        '#64748b',
+      ],
+      borderColor: '#ffffff',
+      borderWidth: 3,
+      hoverOffset: 10,
+    },
+  ],
+}))
+
+const travelModeChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  cutout: '65%',
+
+  plugins: {
+    legend: {
+      position: 'bottom',
+      labels: {
+        padding: 18,
+        usePointStyle: true,
+      },
+    },
+    tooltip: {
+      callbacks: {
+        label(context) {
+          const value = Number(context.parsed || 0)
+
+          const total = context.dataset.data.reduce(
+            (sum, count) => sum + Number(count),
+            0,
+          )
+
+          const percentage = total
+            ? ((value / total) * 100).toFixed(1)
+            : '0.0'
+
+          return `${context.label}: ${value} journeys (${percentage}%)`
+        },
+      },
+    },
+  },
+}
+
+// Group CO2 savings by date or month
+const co2Trend = computed(() => {
+  const totals = {}
+
+  journeys.value.forEach((journey) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(journey.date)) {
+      return
+    }
+
+    const key =
+      chartPeriod.value === 'monthly'
+        ? journey.date.slice(0, 7)
+        : journey.date
+
+    const saved = Number(journey.co2SavedKg)
+
+    totals[key] =
+      (totals[key] || 0) +
+      (Number.isFinite(saved) ? saved : 0)
+  })
+
+  return Object.entries(totals)
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .map(([date, total]) => ({
+      date,
+      total: Number(total.toFixed(2)),
+    }))
+})
+
+// Format dates for display
+function formatChartDate(date) {
+  if (chartPeriod.value === 'monthly') {
+    const [year, month] = date.split('-')
+
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      1,
+    ).toLocaleDateString('en-AU', {
+      month: 'short',
+      year: 'numeric',
+    })
+  }
+
+  const [year, month, day] = date.split('-')
+
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+  ).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+// Line chart data
+const co2ChartData = computed(() => ({
+  labels: co2Trend.value.map((item) =>
+    formatChartDate(item.date),
+  ),
+
+  datasets: [
+    {
+      label: 'CO₂ Saved (kg)',
+      data: co2Trend.value.map((item) => item.total),
+      borderColor: '#166534',
+      backgroundColor: 'rgba(34, 197, 94, 0.15)',
+      pointBackgroundColor: '#166534',
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 2,
+      pointRadius: 5,
+      pointHoverRadius: 8,
+      borderWidth: 3,
+      tension: 0.3,
+      fill: true,
+    },
+  ],
+}))
+
+const co2ChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+
+  interaction: {
+    intersect: false,
+    mode: 'index',
+  },
+
+  plugins: {
+    legend: {
+      display: false,
+    },
+    tooltip: {
+      callbacks: {
+        label(context) {
+          return `CO₂ saved: ${Number(context.parsed.y).toFixed(2)} kg`
+        },
+      },
+    },
+  },
+
+  scales: {
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'CO₂ saved (kg)',
+      },
+    },
+    x: {
+      ticks: {
+        maxRotation: 45,
+        minRotation: 0,
+        autoSkip: true,
+      },
+    },
+  },
+}
+
+// Accessible text summaries for the charts
+const chartSummary = computed(() => {
+  if (!journeys.value.length) {
+    return 'No journeys have been recorded.'
+  }
+
+  return journeysByMode.value
+    .map(([mode, count]) => `${mode}: ${count} journeys`)
+    .join('; ')
+})
+
+const trendSummary = computed(() => {
+  if (!co2Trend.value.length) {
+    return 'No dated journey records are available.'
+  }
+
+  return co2Trend.value
+    .map(
+      (item) =>
+        `${formatChartDate(item.date)}: ${item.total.toFixed(2)} kilograms of CO2 saved`,
+    )
+    .join('; ')
+})
+
+// --------------------------------------------------
 // Existing Dashboard Sections
 // --------------------------------------------------
 
@@ -167,13 +420,12 @@ const sections = [
 ]
 
 // --------------------------------------------------
-// BR E.4 - Export Journey History as CSV
+// BR E.4 - CSV Export
 // --------------------------------------------------
 
 const exportMessage = ref('')
 const exportError = ref(false)
 
-// Safely format values for CSV files
 function escapeCSV(value) {
   let text = String(value ?? '')
 
@@ -182,10 +434,8 @@ function escapeCSV(value) {
     text = "'" + text
   }
 
-  // Escape double quotes
   text = text.replace(/"/g, '""')
 
-  // Wrap values containing commas, quotes or newlines
   if (/[",\r\n]/.test(text)) {
     return `"${text}"`
   }
@@ -193,13 +443,17 @@ function escapeCSV(value) {
   return text
 }
 
-// Download the signed-in user's saved journeys
 function downloadCSV() {
   exportMessage.value = ''
   exportError.value = false
 
-  if (!currentUser.value || !auth.currentUser) {
-    exportMessage.value = 'Please log in to export your journeys.'
+  if (
+    !currentUser.value ||
+    !auth.currentUser ||
+    auth.currentUser.uid !== currentUser.value.uid
+  ) {
+    exportMessage.value =
+      'Please log in to export your journeys.'
     exportError.value = true
     return
   }
@@ -212,7 +466,8 @@ function downloadCSV() {
   }
 
   if (journeys.value.length === 0) {
-    exportMessage.value = 'No journeys available to export.'
+    exportMessage.value =
+      'No journeys available to export.'
     exportError.value = true
     return
   }
@@ -237,15 +492,14 @@ function downloadCSV() {
       ...rows.map((row) => row.map(escapeCSV).join(',')),
     ].join('\r\n')
 
-    // UTF-8 BOM helps Excel recognise the file encoding
     const blob = new Blob(
       ['\uFEFF', csvContent],
       { type: 'text/csv;charset=utf-8;' },
     )
 
     const url = URL.createObjectURL(blob)
-
     const link = document.createElement('a')
+
     link.href = url
     link.download = 'Emitrail_Journey_History.csv'
 
@@ -253,7 +507,6 @@ function downloadCSV() {
     link.click()
     document.body.removeChild(link)
 
-    // Release the temporary object URL
     setTimeout(() => URL.revokeObjectURL(url), 1000)
 
     exportMessage.value =
@@ -282,7 +535,8 @@ const sendReport = async () => {
   emailError.value = false
 
   if (!auth.currentUser) {
-    emailMessage.value = 'Please log in to email your report.'
+    emailMessage.value =
+      'Please log in to email your report.'
     emailError.value = true
     return
   }
@@ -305,7 +559,12 @@ const sendReport = async () => {
       result.data.message ||
       'Your report email has been requested successfully.'
   } catch (error) {
-    console.error('Email report error:', error.code, error.message)
+    console.error(
+      'Email report error:',
+      error.code,
+      error.message,
+    )
+
     emailError.value = true
 
     if (error.code === 'functions/failed-precondition') {
@@ -390,7 +649,7 @@ const sendReport = async () => {
       </div>
     </section>
 
-    <!-- Dashboard statistics -->
+    <!-- Existing Dashboard Statistics -->
     <section
       class="section-soft border-top border-bottom py-5"
       aria-labelledby="statistics-heading"
@@ -447,59 +706,322 @@ const sendReport = async () => {
       </div>
     </section>
 
-    <!-- What users can track -->
+    <!-- BR F.1 - Interactive Charts -->
     <section
       class="container py-5"
-      aria-labelledby="tracking-heading"
+      aria-labelledby="charts-heading"
     >
-      <div class="row justify-content-center text-center mb-4">
+      <div class="row mb-4">
         <div class="col-12 col-lg-8">
 
           <p class="eyebrow mb-2">
-            What you can track
+            Travel analytics
           </p>
 
           <h2
-            id="tracking-heading"
-            class="fw-bold"
+            id="charts-heading"
+            class="fw-bold mb-3"
           >
-            From a single trip to a lasting habit
+            Explore your climate impact
           </h2>
+
+          <p class="text-muted mb-0">
+            Discover how you travel and how much CO₂
+            your sustainable journeys have saved over time.
+            Charts are generated from your saved Firestore journeys.
+          </p>
 
         </div>
       </div>
 
-      <div class="row g-4">
+      <!-- User not logged in -->
+      <div
+        v-if="!currentUser"
+        class="card border-0 shadow-sm"
+      >
+        <div class="card-body p-4 text-center">
+          <p class="text-muted">
+            Log in to explore your personal travel analytics.
+          </p>
+
+          <RouterLink
+            to="/login"
+            class="btn btn-brand"
+          >
+            Log in
+          </RouterLink>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div
+        v-else-if="loadingJourneys"
+        class="text-center py-4"
+        role="status"
+        aria-live="polite"
+      >
         <div
-          v-for="section in sections"
-          :key="section.title"
-          class="col-12 col-md-4"
-        >
-          <div class="card h-100 border-0 shadow-sm">
+          class="spinner-border text-success"
+          aria-hidden="true"
+        ></div>
+
+        <p class="text-muted mt-3">
+          Loading your travel analytics...
+        </p>
+      </div>
+
+      <!-- Error -->
+      <div
+        v-else-if="journeyError"
+        class="alert alert-danger"
+        role="alert"
+      >
+        {{ journeyError }}
+      </div>
+
+      <!-- No data -->
+      <div
+        v-else-if="journeys.length === 0"
+        class="card border-0 shadow-sm"
+      >
+        <div class="card-body p-4 text-center">
+          <p class="text-muted mb-3">
+            You haven't logged any journeys yet.
+            Add your first journey to see your charts.
+          </p>
+
+          <RouterLink
+            to="/compare"
+            class="btn btn-brand"
+          >
+            Log a Journey
+          </RouterLink>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div v-else class="row g-4">
+
+        <!-- Doughnut Chart -->
+        <div class="col-12 col-lg-5">
+          <div class="card border-0 shadow-sm h-100 chart-card">
             <div class="card-body p-4">
 
-              <span
-                class="icon-tile mb-3"
-                aria-hidden="true"
-              >
-                <AppIcon :name="section.icon" />
-              </span>
-
-              <h3 class="h5 fw-bold">
-                {{ section.title }}
+              <h3 class="h5 fw-bold mb-2">
+                Journeys by Travel Mode
               </h3>
 
-              <p class="text-muted mb-0">
-                {{ section.text }}
+              <p class="small text-muted mb-3">
+                Hover over or select a segment to view
+                the number and percentage of journeys.
               </p>
+
+              <div
+                class="chart-container"
+                role="img"
+                :aria-label="
+                  'Doughnut chart showing journeys by travel mode. ' +
+                  chartSummary
+                "
+              >
+                <Doughnut
+                  :data="travelModeChartData"
+                  :options="travelModeChartOptions"
+                />
+              </div>
+
+              <p class="small text-muted mt-3 mb-0">
+                Total journeys: {{ journeys.length }}
+              </p>
+
+              <details class="mt-3">
+                <summary class="small fw-semibold">
+                  View chart data as text
+                </summary>
+
+                <ul class="small mt-2 mb-0">
+                  <li
+                    v-for="[mode, count] in journeysByMode"
+                    :key="mode"
+                  >
+                    {{ mode }}: {{ count }} journeys
+                  </li>
+                </ul>
+              </details>
 
             </div>
           </div>
         </div>
+
+        <!-- Line Chart -->
+        <div class="col-12 col-lg-7">
+          <div class="card border-0 shadow-sm h-100 chart-card">
+            <div class="card-body p-4">
+
+              <div
+                class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3"
+              >
+                <div>
+                  <h3 class="h5 fw-bold mb-2">
+                    CO₂ Savings Over Time
+                  </h3>
+
+                  <p class="small text-muted mb-0">
+                    Compare estimated emissions avoided
+                    across different dates.
+                  </p>
+                </div>
+
+                <div>
+                  <label
+                    for="chart-period"
+                    class="form-label small fw-semibold"
+                  >
+                    Time period
+                  </label>
+
+                  <select
+                    id="chart-period"
+                    v-model="chartPeriod"
+                    class="form-select form-select-sm"
+                  >
+                    <option value="daily">
+                      Daily
+                    </option>
+
+                    <option value="monthly">
+                      Monthly
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div
+                v-if="co2Trend.length > 0"
+                class="chart-container"
+                role="img"
+                :aria-label="
+                  'Line chart showing CO2 savings over time. ' +
+                  trendSummary
+                "
+              >
+                <Line
+                  :data="co2ChartData"
+                  :options="co2ChartOptions"
+                />
+              </div>
+
+              <p
+                v-else
+                class="text-muted text-center py-5"
+              >
+                No dated journey records are available.
+              </p>
+
+              <p class="small text-muted mt-3 mb-0">
+                Values show estimated CO₂ savings
+                compared with car travel.
+              </p>
+
+              <details
+                v-if="co2Trend.length > 0"
+                class="mt-3"
+              >
+                <summary class="small fw-semibold">
+                  View chart data as text
+                </summary>
+
+                <div class="table-responsive mt-2">
+                  <table class="table table-sm">
+                    <thead>
+                      <tr>
+                        <th scope="col">Period</th>
+                        <th scope="col">CO₂ saved (kg)</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      <tr
+                        v-for="item in co2Trend"
+                        :key="item.date"
+                      >
+                        <td>
+                          {{ formatChartDate(item.date) }}
+                        </td>
+
+                        <td>
+                          {{ item.total.toFixed(2) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
 
-    <!-- BR D.3 - Interactive Travel History Table -->
+    <!-- Existing Information Cards -->
+    <section
+      class="section-soft border-top py-5"
+      aria-labelledby="tracking-heading"
+    >
+      <div class="container">
+
+        <div class="row justify-content-center text-center mb-4">
+          <div class="col-12 col-lg-8">
+
+            <p class="eyebrow mb-2">
+              What you can track
+            </p>
+
+            <h2
+              id="tracking-heading"
+              class="fw-bold"
+            >
+              From a single trip to a lasting habit
+            </h2>
+
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div
+            v-for="section in sections"
+            :key="section.title"
+            class="col-12 col-md-4"
+          >
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-body p-4">
+
+                <span
+                  class="icon-tile mb-3"
+                  aria-hidden="true"
+                >
+                  <AppIcon :name="section.icon" />
+                </span>
+
+                <h3 class="h5 fw-bold">
+                  {{ section.title }}
+                </h3>
+
+                <p class="text-muted mb-0">
+                  {{ section.text }}
+                </p>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- BR D.3 - Interactive Journey History -->
     <section
       class="section-soft border-top py-5"
       aria-labelledby="journey-history-heading"
@@ -759,9 +1281,22 @@ const sendReport = async () => {
 </template>
 
 <style scoped>
+/* BR F.1 - Chart styling */
+.chart-card {
+  border-radius: 12px;
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 330px;
+}
+
 /* BR E.3 - Keyboard focus visibility */
 .impact-page button:focus-visible,
-.impact-page a:focus-visible {
+.impact-page a:focus-visible,
+.impact-page select:focus-visible,
+.impact-page summary:focus-visible {
   outline: 3px solid #14532d;
   outline-offset: 3px;
 }
@@ -780,6 +1315,14 @@ const sendReport = async () => {
 
   .display-6 {
     font-size: 1.8rem;
+  }
+
+  .chart-container {
+    height: 280px;
+  }
+
+  .chart-card .card-body {
+    padding: 20px !important;
   }
 }
 </style>
