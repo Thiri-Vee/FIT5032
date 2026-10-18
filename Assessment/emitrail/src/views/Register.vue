@@ -6,7 +6,8 @@ import {
   updateProfile,
   sendEmailVerification,
 } from 'firebase/auth'
-import { auth } from '../firebase/init.js'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from '../firebase/init.js'
 
 // Existing BR C security functions
 import {
@@ -124,6 +125,7 @@ const clearError = (field) => {
 
 // --------------------------------------------------
 // BR D.1 - Firebase Authentication registration
+// BR F.1 - Create Firestore user profile
 // --------------------------------------------------
 
 const handleRegister = async () => {
@@ -142,6 +144,7 @@ const handleRegister = async () => {
   let accountCreated = false
 
   try {
+    // Step 1: Create Firebase Authentication account
     const userCredential = await createUserWithEmailAndPassword(
       auth,
       safeEmail,
@@ -150,11 +153,26 @@ const handleRegister = async () => {
 
     accountCreated = true
 
-    await updateProfile(userCredential.user, {
+    const firebaseUser = userCredential.user
+
+    // Step 2: Update Firebase Authentication display name
+    await updateProfile(firebaseUser, {
       displayName: safeName,
     })
 
-    await sendEmailVerification(userCredential.user)
+    // Step 3: Create a matching Firestore profile
+    // Every public registration receives the regular user role.
+    // Admin roles must be assigned by an authorised administrator.
+    await setDoc(doc(db, 'users', firebaseUser.uid), {
+      uid: firebaseUser.uid,
+      name: safeName,
+      email: firebaseUser.email,
+      role: 'user',
+      createdAt: serverTimestamp(),
+    })
+
+    // Step 4: Send verification email
+    await sendEmailVerification(firebaseUser)
 
     message.value =
       'Account created successfully! Please check your inbox to verify your email address.'
@@ -167,7 +185,7 @@ const handleRegister = async () => {
     form.confirmPassword = ''
 
   } catch (error) {
-    console.error('Firebase registration error:', error.code)
+    console.error('Firebase registration error:', error)
 
     messageIsError.value = true
 
@@ -195,19 +213,15 @@ const handleRegister = async () => {
 
 <template>
   <div class="container py-5 register-page">
-
     <div
       class="row justify-content-center align-items-stretch g-0 shadow-sm auth-shell"
     >
-
       <!-- Welcome panel -->
       <div class="col-lg-5 d-none d-lg-block">
-
         <div
           class="auth-aside h-100 text-white p-4 d-flex flex-column justify-content-between"
         >
           <div>
-
             <p class="eyebrow text-white-50 mb-2">
               Join Emitrail
             </p>
@@ -221,7 +235,6 @@ const handleRegister = async () => {
               <li>• Track distance, trips and emissions avoided</li>
               <li>• Join challenges and earn milestone badges</li>
             </ul>
-
           </div>
 
           <img
@@ -229,15 +242,12 @@ const handleRegister = async () => {
             alt=""
             class="auth-aside-img mt-3"
           />
-
         </div>
       </div>
 
       <!-- Registration form -->
       <div class="col-12 col-sm-11 col-md-9 col-lg-7">
-
         <div class="card border-0 p-4 p-md-5 register-card h-100">
-
           <h1
             id="register-heading"
             class="h3 mb-1"
@@ -258,10 +268,8 @@ const handleRegister = async () => {
             novalidate
             @submit.prevent="handleRegister"
           >
-
             <!-- Name -->
             <div class="mb-3">
-
               <label
                 for="name"
                 class="form-label"
@@ -293,12 +301,10 @@ const handleRegister = async () => {
               >
                 {{ errors.name }}
               </div>
-
             </div>
 
             <!-- Email -->
             <div class="mb-3">
-
               <label
                 for="email"
                 class="form-label"
@@ -331,12 +337,10 @@ const handleRegister = async () => {
               >
                 {{ errors.email }}
               </div>
-
             </div>
 
             <!-- Password -->
             <div class="mb-3">
-
               <label
                 for="password"
                 class="form-label"
@@ -377,12 +381,10 @@ const handleRegister = async () => {
               >
                 {{ errors.password }}
               </div>
-
             </div>
 
             <!-- Confirm password -->
             <div class="mb-4">
-
               <label
                 for="confirmPassword"
                 class="form-label"
@@ -416,7 +418,6 @@ const handleRegister = async () => {
               >
                 {{ errors.confirmPassword }}
               </div>
-
             </div>
 
             <!-- Register button -->
@@ -458,12 +459,9 @@ const handleRegister = async () => {
                   : ''
               }}
             </p>
-
           </form>
-
         </div>
       </div>
-
     </div>
   </div>
 </template>
