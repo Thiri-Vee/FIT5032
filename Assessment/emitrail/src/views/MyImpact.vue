@@ -167,6 +167,107 @@ const sections = [
 ]
 
 // --------------------------------------------------
+// BR E.4 - Export Journey History as CSV
+// --------------------------------------------------
+
+const exportMessage = ref('')
+const exportError = ref(false)
+
+// Safely format values for CSV files
+function escapeCSV(value) {
+  let text = String(value ?? '')
+
+  // Prevent spreadsheet formula injection
+  if (/^[\s]*[=+\-@\t\r]/.test(text)) {
+    text = "'" + text
+  }
+
+  // Escape double quotes
+  text = text.replace(/"/g, '""')
+
+  // Wrap values containing commas, quotes or newlines
+  if (/[",\r\n]/.test(text)) {
+    return `"${text}"`
+  }
+
+  return text
+}
+
+// Download the signed-in user's saved journeys
+function downloadCSV() {
+  exportMessage.value = ''
+  exportError.value = false
+
+  if (!currentUser.value || !auth.currentUser) {
+    exportMessage.value = 'Please log in to export your journeys.'
+    exportError.value = true
+    return
+  }
+
+  if (loadingJourneys.value || journeyError.value) {
+    exportMessage.value =
+      'Your journeys are not ready. Please try again.'
+    exportError.value = true
+    return
+  }
+
+  if (journeys.value.length === 0) {
+    exportMessage.value = 'No journeys available to export.'
+    exportError.value = true
+    return
+  }
+
+  try {
+    const headers = [
+      'Date',
+      'Travel Mode',
+      'Distance (km)',
+      'CO2 Saved (kg)',
+    ]
+
+    const rows = journeys.value.map((journey) => [
+      journey.date,
+      journey.mode,
+      journey.distanceKm,
+      journey.co2SavedKg,
+    ])
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map((row) => row.map(escapeCSV).join(',')),
+    ].join('\r\n')
+
+    // UTF-8 BOM helps Excel recognise the file encoding
+    const blob = new Blob(
+      ['\uFEFF', csvContent],
+      { type: 'text/csv;charset=utf-8;' },
+    )
+
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'Emitrail_Journey_History.csv'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    // Release the temporary object URL
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+
+    exportMessage.value =
+      `${journeys.value.length} journey records prepared for download.`
+  } catch (error) {
+    console.error('CSV export error:', error)
+
+    exportMessage.value =
+      'Unable to export your journeys. Please try again.'
+    exportError.value = true
+  }
+}
+
+// --------------------------------------------------
 // BR D.2 - Email with PDF Attachment
 // --------------------------------------------------
 
@@ -486,7 +587,7 @@ const sendReport = async () => {
           </button>
         </div>
 
-        <!-- Interactive table -->
+        <!-- Interactive table and CSV export -->
         <div v-else>
 
           <p
@@ -497,6 +598,43 @@ const sendReport = async () => {
             {{ journeys.length }} journeys loaded.
           </p>
 
+          <!-- BR E.4 - CSV Export Button -->
+          <div
+            class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"
+          >
+            <p class="text-muted small mb-0">
+              Export your saved journey history for your records.
+            </p>
+
+            <button
+              type="button"
+              class="btn btn-success d-inline-flex align-items-center gap-2"
+              :disabled="journeys.length === 0"
+              @click="downloadCSV"
+            >
+              <span aria-hidden="true">
+                <AppIcon name="download" :size="18" />
+              </span>
+
+              Download CSV
+            </button>
+          </div>
+
+          <!-- CSV export feedback -->
+          <div
+            v-if="exportMessage"
+            class="alert mb-3"
+            :class="
+              exportError
+                ? 'alert-danger'
+                : 'alert-success'
+            "
+            :role="exportError ? 'alert' : 'status'"
+          >
+            {{ exportMessage }}
+          </div>
+
+          <!-- Existing interactive table -->
           <InteractiveTable
             :rows="journeys"
             :columns="journeyColumns"
