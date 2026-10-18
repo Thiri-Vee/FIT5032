@@ -1,5 +1,6 @@
+
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, useId } from 'vue'
 
 const props = defineProps({
   rows: {
@@ -20,6 +21,12 @@ const currentPage = ref(1)
 
 const pageSize = 10
 
+// BR E.3 - Unique IDs for accessible labels
+const tableId = useId()
+const searchId = `${tableId}-search`
+const tableCaptionId = `${tableId}-caption`
+const resultStatusId = `${tableId}-results`
+
 const filteredRows = computed(() => {
   const keyword = search.value.trim().toLowerCase()
 
@@ -35,7 +42,9 @@ const filteredRows = computed(() => {
     const matchesFilters = props.columns.every((column) => {
       const filterValue = String(
         filters.value[column.key] ?? '',
-      ).trim().toLowerCase()
+      )
+        .trim()
+        .toLowerCase()
 
       return (
         !filterValue ||
@@ -81,6 +90,43 @@ const paginatedRows = computed(() => {
   return sortedRows.value.slice(start, start + pageSize)
 })
 
+const firstVisibleRecord = computed(() =>
+  sortedRows.value.length === 0
+    ? 0
+    : (currentPage.value - 1) * pageSize + 1,
+)
+
+const lastVisibleRecord = computed(() =>
+  Math.min(currentPage.value * pageSize, sortedRows.value.length),
+)
+
+// Screen-reader announcements
+const resultAnnouncement = computed(() => {
+  const count = sortedRows.value.length
+
+  if (count === 0) {
+    return 'No matching records found.'
+  }
+
+  return `Showing records ${firstVisibleRecord.value} to ${lastVisibleRecord.value} of ${count}. Page ${currentPage.value} of ${totalPages.value}.`
+})
+
+const sortAnnouncement = computed(() => {
+  if (!sortKey.value) {
+    return ''
+  }
+
+  const column = props.columns.find(
+    (item) => item.key === sortKey.value,
+  )
+
+  const label = column?.label ?? sortKey.value
+
+  return `Sorted by ${label}, ${
+    sortDirection.value === 'asc' ? 'ascending' : 'descending'
+  }.`
+})
+
 function sortBy(key) {
   if (sortKey.value === key) {
     sortDirection.value =
@@ -91,10 +137,50 @@ function sortBy(key) {
   }
 }
 
-watch([search, filters, sortKey, sortDirection], () => {
-  currentPage.value = 1
-}, { deep: true })
+function getSortState(key) {
+  if (sortKey.value !== key) {
+    return 'none'
+  }
 
+  return sortDirection.value === 'asc'
+    ? 'ascending'
+    : 'descending'
+}
+
+function getSortButtonLabel(column) {
+  if (sortKey.value !== column.key) {
+    return `Sort by ${column.label}, ascending`
+  }
+
+  return `Sort by ${column.label}, ${
+    sortDirection.value === 'asc'
+      ? 'descending'
+      : 'ascending'
+  }`
+}
+
+function previousPage() {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+function nextPage() {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+// Reset pagination when search, filters or sorting change
+watch(
+  [search, filters, sortKey, sortDirection],
+  () => {
+    currentPage.value = 1
+  },
+  { deep: true },
+)
+
+// Keep current page valid if data changes
 watch(totalPages, (pages) => {
   if (currentPage.value > pages) {
     currentPage.value = pages
@@ -104,52 +190,119 @@ watch(totalPages, (pages) => {
 
 <template>
   <div class="interactive-table">
+
+    <!-- BR E.3 - Accessible search -->
     <div class="mb-3">
-      <label class="form-label fw-semibold">
+      <label
+        :for="searchId"
+        class="form-label fw-semibold"
+      >
         Search all records
       </label>
+
       <input
+        :id="searchId"
         v-model="search"
         type="search"
         class="form-control"
         placeholder="Search..."
+        :aria-describedby="resultStatusId"
       />
     </div>
 
-    <div class="table-responsive">
+    <!-- BR E.3 - Screen-reader announcements -->
+    <div class="visually-hidden">
+      <p
+        :id="resultStatusId"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {{ resultAnnouncement }}
+      </p>
+
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {{ sortAnnouncement }}
+      </p>
+    </div>
+
+    <!-- Interactive data table -->
+    <div
+      class="table-responsive"
+      role="region"
+      aria-label="Travel history data table"
+      tabindex="0"
+    >
       <table class="table table-striped table-hover align-middle">
+
+        <!-- BR E.3 - Accessible table caption -->
+        <caption
+          :id="tableCaptionId"
+          class="visually-hidden"
+        >
+          Travel records. Use the column heading buttons
+          to sort the table. Use the search fields
+          to filter records.
+        </caption>
+
         <thead>
+          <!-- Sorting row -->
+          <tr>
+            <th
+              v-for="column in columns"
+              :key="column.key"
+              scope="col"
+              :aria-sort="getSortState(column.key)"
+            >
+              <button
+                type="button"
+                class="btn btn-link text-dark text-decoration-none fw-bold p-0 sort-button"
+                :aria-label="getSortButtonLabel(column)"
+                @click="sortBy(column.key)"
+              >
+                <span>{{ column.label }}</span>
+
+                <span
+                  class="sort-icon"
+                  aria-hidden="true"
+                >
+                  <template v-if="sortKey === column.key">
+                    {{ sortDirection === 'asc' ? '▲' : '▼' }}
+                  </template>
+
+                  <template v-else>
+                    ↕
+                  </template>
+                </span>
+              </button>
+            </th>
+          </tr>
+
+          <!-- Column filters -->
           <tr>
             <th
               v-for="column in columns"
               :key="column.key"
               scope="col"
             >
-              <button
-                type="button"
-                class="btn btn-link text-dark text-decoration-none fw-bold p-0"
-                @click="sortBy(column.key)"
+              <label
+                :for="`${tableId}-filter-${column.key}`"
+                class="visually-hidden"
               >
-                {{ column.label }}
-                <span v-if="sortKey === column.key">
-                  {{ sortDirection === 'asc' ? '▲' : '▼' }}
-                </span>
-                <span v-else>↕</span>
-              </button>
-            </th>
-          </tr>
+                Filter {{ column.label }}
+              </label>
 
-          <tr>
-            <th
-              v-for="column in columns"
-              :key="column.key"
-            >
               <input
+                :id="`${tableId}-filter-${column.key}`"
                 v-model="filters[column.key]"
                 type="search"
                 class="form-control form-control-sm"
-                :aria-label="`Filter ${column.label}`"
                 :placeholder="`Filter ${column.label}`"
+                :aria-describedby="resultStatusId"
               />
             </th>
           </tr>
@@ -168,6 +321,7 @@ watch(totalPages, (pages) => {
             </td>
           </tr>
 
+          <!-- Empty state -->
           <tr v-if="paginatedRows.length === 0">
             <td
               :colspan="columns.length"
@@ -180,39 +334,51 @@ watch(totalPages, (pages) => {
       </table>
     </div>
 
-    <div
+    <!-- Pagination -->
+    <nav
       class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3"
+      aria-label="Table pagination"
     >
       <span class="text-muted small">
         Showing
-        {{ sortedRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1 }}
+        {{ firstVisibleRecord }}
         –
-        {{ Math.min(currentPage * pageSize, sortedRows.length) }}
+        {{ lastVisibleRecord }}
         of {{ sortedRows.length }} records
       </span>
 
       <div class="d-flex align-items-center gap-2">
+
         <button
+          type="button"
           class="btn btn-outline-secondary btn-sm"
           :disabled="currentPage === 1"
-          @click="currentPage--"
+          aria-label="Go to previous page"
+          @click="previousPage"
         >
           Previous
         </button>
 
-        <span class="small">
+        <span
+          class="small"
+          aria-live="off"
+        >
           Page {{ currentPage }} of {{ totalPages }}
         </span>
 
         <button
+          type="button"
           class="btn btn-outline-secondary btn-sm"
           :disabled="currentPage === totalPages"
-          @click="currentPage++"
+          aria-label="Go to next page"
+          @click="nextPage"
         >
           Next
         </button>
+
       </div>
-    </div>
+    </nav>
+
   </div>
 </template>
 
@@ -238,6 +404,18 @@ watch(totalPages, (pages) => {
 .form-control:focus {
   border-color: #43865c;
   box-shadow: 0 0 0 0.2rem rgba(67, 134, 92, 0.14);
+}
+
+/* BR E.3 - Keyboard focus visibility */
+.interactive-table button:focus-visible,
+.interactive-table input:focus-visible {
+  outline: 3px solid #14532d;
+  outline-offset: 3px;
+}
+
+.table-responsive:focus-visible {
+  outline: 3px solid #14532d;
+  outline-offset: 3px;
 }
 
 .table {
@@ -274,6 +452,17 @@ watch(totalPages, (pages) => {
   padding: 7px 10px;
   font-size: 0.85rem;
   background-color: #ffffff;
+}
+
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.sort-icon {
+  font-size: 0.85rem;
 }
 
 .btn-outline-secondary {
