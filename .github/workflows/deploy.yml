@@ -1,0 +1,43 @@
+
+name: Deploy NoMash-Library to GitHub Pages
+
+on:
+  push:
+    branches:
+      - efolio
+    paths:
+      - 'EFOLIO/NoMash-Library/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: EFOLIO/NoMash-Library/package-lock.json
+
+      - name: Install dependencies
+        working-directory: EFOLIO/NoMash-Library
+        run: npm ci
+
+      - name: Build
+        working-directory: EFOLIO/NoMash-Library
+        run: npm run build
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: EFOLIO/NoMash-Library/dist
