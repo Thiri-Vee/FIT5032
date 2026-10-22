@@ -34,6 +34,8 @@ jobs:
 
       - name: Build
         working-directory: EFOLIO/NoMash-Library
+        env:
+          VITE_WEATHER_API_KEY: ${{ secrets.VITE_WEATHER_API_KEY }}
         run: npm run build
 
       - name: Deploy

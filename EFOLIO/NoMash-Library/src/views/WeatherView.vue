@@ -1,3 +1,4 @@
+
 <template>
   <div class="container">
     <div class="header">
@@ -9,20 +10,30 @@
           v-model="city"
           placeholder="Enter city name"
           class="search-input"
+          @keyup.enter="searchByCity"
         />
 
-        <button @click="searchByCity" class="search-button">
-          Search
+        <button
+          @click="searchByCity"
+          class="search-button"
+          :disabled="loading"
+        >
+          {{ loading ? "Loading..." : "Search" }}
         </button>
       </div>
     </div>
 
+    <!-- Display error messages -->
+    <p v-if="errorMessage" class="error-message">
+      {{ errorMessage }}
+    </p>
+
     <!-- Main weather content -->
     <main>
-      <!-- Only display weather information when data is available -->
       <div v-if="weatherData">
         <h2>
-          {{ weatherData.name }}, {{ weatherData.sys.country }}
+          {{ weatherData.name }},
+          {{ weatherData.sys.country }}
         </h2>
 
         <div>
@@ -43,21 +54,27 @@
 import { ref, computed, onMounted } from "vue";
 import axios from "axios";
 
-// Replace this with your OpenWeatherMap API key
-const apikey = "c8540a13289356684dc01b01d7662fe7";
+// OpenWeatherMap API key from Vite environment variable
+const apikey = import.meta.env.VITE_WEATHER_API_KEY;
+
+// OpenWeatherMap endpoint
+const WEATHER_API_URL =
+  "https://api.openweathermap.org/data/2.5/weather";
 
 // Reactive state
 const city = ref("");
 const weatherData = ref(null);
+const loading = ref(false);
+const errorMessage = ref("");
 
-// Convert Kelvin temperature to Celsius
+// Temperature is already in Celsius because units=metric
 const temperature = computed(() => {
   return weatherData.value
-    ? Math.floor(weatherData.value.main.temp - 273.15)
+    ? Math.floor(weatherData.value.main.temp)
     : null;
 });
 
-// Get the weather icon URL
+// Weather icon URL
 const iconUrl = computed(() => {
   return weatherData.value
     ? `https://openweathermap.org/img/wn/${weatherData.value.weather[0].icon}@2x.png`
@@ -65,48 +82,93 @@ const iconUrl = computed(() => {
 });
 
 // Fetch weather information from OpenWeatherMap
-const fetchWeatherData = async (url) => {
+const fetchWeatherData = async (params) => {
+  if (!apikey) {
+    errorMessage.value = "Weather API key is not configured.";
+    return;
+  }
+
+  loading.value = true;
+  errorMessage.value = "";
+  weatherData.value = null;
+
   try {
-    const response = await axios.get(url);
+    const response = await axios.get(WEATHER_API_URL, {
+      params: {
+        ...params,
+        appid: apikey,
+        units: "metric",
+      },
+    });
 
     weatherData.value = response.data;
   } catch (error) {
-    console.error("Error fetching weather data:", error);
+    const status = error.response?.status;
+
+    console.error(
+      "Weather API error:",
+      status,
+      error.response?.data?.message
+    );
+
+    if (status === 401) {
+      errorMessage.value =
+        "Invalid or inactive API key.";
+    } else if (status === 404) {
+      errorMessage.value =
+        "City not found. Please try another city.";
+    } else if (status === 429) {
+      errorMessage.value =
+        "Too many requests. Please try again later.";
+    } else {
+      errorMessage.value =
+        "Unable to fetch weather information.";
+    }
+  } finally {
+    loading.value = false;
   }
 };
 
 // Search weather by city
 const searchByCity = async () => {
-  if (!city.value.trim()) {
+  const cityName = city.value.trim();
+
+  if (!cityName) {
+    errorMessage.value = "Please enter a city name.";
     return;
   }
 
-  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(
-    city.value
-  )}&appid=${apikey}`;
-
-  await fetchWeatherData(url);
+  // OpenWeatherMap requires q, not city
+  await fetchWeatherData({
+    q: cityName,
+  });
 };
 
-// Get weather based on the user's current location
+// Fetch weather using current location
 const fetchCurrentLocationWeather = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-
-        const url = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${apikey}`;
-
-        await fetchWeatherData(url);
-      },
-      (error) => {
-        console.error("Error getting current location:", error);
-      }
-    );
+  if (!navigator.geolocation) {
+    return;
   }
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude } = position.coords;
+
+      await fetchWeatherData({
+        lat: latitude,
+        lon: longitude,
+      });
+    },
+    (error) => {
+      console.error(
+        "Error getting current location:",
+        error.message
+      );
+    }
+  );
 };
 
-// Run when the page is first loaded
+// Fetch current-location weather on page load
 onMounted(() => {
   fetchCurrentLocationWeather();
 });
@@ -146,6 +208,16 @@ onMounted(() => {
   border: none;
   border-radius: 5px;
   cursor: pointer;
+}
+
+.search-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  color: #dc3545;
+  margin: 15px 0;
 }
 
 main {
